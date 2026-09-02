@@ -120,6 +120,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refreshUserData();
+    };
+    const intervalId = window.setInterval(refreshWhenVisible, 10000);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [user]);
+
   const navigate = (route: string) => {
     setCurrentRoute(route);
     const nextPath = pathFromRoute(route);

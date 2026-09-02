@@ -2028,13 +2028,68 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
 });
 
 // Admin Adjust User Balance
-app.put('/api/admin/users/:id/balance', adminMiddleware, (req, res) => {
+app.put('/api/admin/users/:id/balance', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { action, amount, reason } = req.body; // action: 'add' | 'deduct' | 'set'
 
   const adjAmount = Number(amount);
   if (isNaN(adjAmount)) {
     return res.status(400).json({ error: 'Valid amount is required.' });
+  }
+
+  if (!['add', 'deduct', 'set'].includes(action)) {
+    return res.status(400).json({ error: 'Invalid balance action.' });
+  }
+
+  if (supabase) {
+    const { data: profile } = await supabase.from('profiles').select('id').eq('id', id).maybeSingle();
+    if (profile) {
+      const { data: currentWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', id).maybeSingle();
+      if (walletError) return res.status(500).json({ error: walletError.message });
+      const previousBalance = Number(currentWallet?.available_balance || 0);
+      const availableBalance = action === 'add'
+        ? previousBalance + adjAmount
+        : action === 'deduct'
+          ? Math.max(0, previousBalance - adjAmount)
+          : adjAmount;
+      const now = new Date().toISOString();
+      const { data: updatedWallet, error: updateError } = await supabase.from('wallets').upsert({
+        user_id: id,
+        available_balance: availableBalance,
+        invested_balance: Number(currentWallet?.invested_balance || 0),
+        total_earnings: Number(currentWallet?.total_earnings || 0),
+        referral_earnings: Number(currentWallet?.referral_earnings || 0),
+        total_deposited: Number(currentWallet?.total_deposited || 0),
+        total_withdrawn: Number(currentWallet?.total_withdrawn || 0),
+        pending_withdrawals: Number(currentWallet?.pending_withdrawals || 0),
+        pending_deposits: Number(currentWallet?.pending_deposits || 0),
+        updated_at: now,
+      }, { onConflict: 'user_id' }).select('*').single();
+      if (updateError) return res.status(500).json({ error: updateError.message });
+
+      const difference = availableBalance - previousBalance;
+      await supabase.from('transactions').insert({
+        id: `tx_${crypto.randomBytes(6).toString('hex')}`,
+        user_id: id,
+        type: 'admin_adjustment',
+        direction: difference >= 0 ? 'in' : 'out',
+        amount: Math.abs(difference),
+        reference: 'ADMIN-ADJ',
+        description: `Admin manual balance adjustment: ${reason || 'Administrative credit/debit'}`,
+        status: 'completed',
+        created_at: now,
+      });
+      await supabase.from('notifications').insert({
+        id: `notif_${crypto.randomBytes(6).toString('hex')}`,
+        user_id: id,
+        title: 'Account Balance Adjustment',
+        message: `Your available balance has been updated by administrator. New balance: NPR ${availableBalance.toLocaleString('en-IN')}.`,
+        type: 'system',
+        read: false,
+        created_at: now,
+      });
+      return res.json({ message: 'User balance updated successfully', wallet: mapSupabaseWallet(updatedWallet, id) });
+    }
   }
 
   const db = readDb();
