@@ -1,4 +1,5 @@
 import React, { lazy, Suspense } from 'react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { DesktopSidebar } from './components/DesktopSidebar';
@@ -129,6 +130,9 @@ const AppContent: React.FC = () => {
 
       {/* Toasts */}
       <ToastContainer />
+
+      {/* Speed Insights */}
+      <SpeedInsights />
 
       {/* Top Header */}
       <Header />
