@@ -495,75 +495,14 @@ async function hydrateDbFromSupabase() {
 }
 
 async function applySupabaseSignupReferral(referredUserId: string, referredUserName: string, referredUserEmail: string, referralCode?: string) {
-  if (!supabase || !referralCode?.trim()) return;
-
-  const { data: referrer } = await supabase
-    .from('profiles')
-    .select('id, full_name, email')
-    .eq('referral_code', referralCode.trim().toUpperCase())
-    .maybeSingle();
-  if (!referrer || referrer.id === referredUserId) return;
-
-  const { data: existingReferral } = await supabase
-    .from('referrals')
-    .select('id')
-    .eq('referrer_id', referrer.id)
-    .eq('referred_user_id', referredUserId)
-    .maybeSingle();
-  if (existingReferral) return;
-
-  const { data: referrerWallet } = await supabase
-    .from('wallets')
-    .select('*')
-    .eq('user_id', referrer.id)
-    .maybeSingle();
-  const { error: referrerWalletError } = await supabase.from('wallets').upsert({
-    user_id: referrer.id,
-    available_balance: Number(referrerWallet?.available_balance || 0),
-    referral_earnings: Number(referrerWallet?.referral_earnings || 0) + 100,
-    invested_balance: Number(referrerWallet?.invested_balance || 0),
-    total_earnings: Number(referrerWallet?.total_earnings || 0),
-    total_deposited: Number(referrerWallet?.total_deposited || 0),
-    total_withdrawn: Number(referrerWallet?.total_withdrawn || 0),
-    pending_withdrawals: Number(referrerWallet?.pending_withdrawals || 0),
-    pending_deposits: Number(referrerWallet?.pending_deposits || 0),
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' });
-  const { error: referredWalletError } = await supabase.from('wallets').upsert({
-    user_id: referredUserId,
-    available_balance: 50,
-    referral_earnings: 0,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' });
-  if (referrerWalletError || referredWalletError) {
-    console.error(`Supabase referral wallet update failed: ${referrerWalletError?.message || referredWalletError?.message}`);
-    return;
-  }
-
-  const now = new Date().toISOString();
-  await supabase.from('referrals').insert({
-    id: `ref_${crypto.randomBytes(6).toString('hex')}`,
-    referrer_id: referrer.id,
-    referred_user_id: referredUserId,
-    total_invested_by_referred: 0,
-    bonus_earned: 100,
-    status: 'active',
-    created_at: now,
-  });
-  await supabase.from('transactions').insert([
-    { id: `tx_${crypto.randomBytes(6).toString('hex')}`, user_id: referrer.id, type: 'referral_bonus', direction: 'in', amount: 100, reference: `REF-SIGNUP-${referredUserId.toUpperCase()}`, description: `NPR 100 referral bonus for inviting ${referredUserName}`, status: 'completed', created_at: now },
-    { id: `tx_${crypto.randomBytes(6).toString('hex')}`, user_id: referredUserId, type: 'referral_bonus', direction: 'in', amount: 50, reference: `WELCOME-REF-${referredUserId.toUpperCase()}`, description: 'NPR 50 referral signup welcome bonus', status: 'completed', created_at: now },
-  ]);
-  await supabase.from('notifications').insert([
-    { id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: referrer.id, title: 'New Referral Registered!', message: `${referredUserName} registered using your referral code. NPR 100 has been added to your referral earnings.`, type: 'referral', read: false, created_at: now },
-    { id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: referredUserId, title: 'Referral Welcome Bonus Added!', message: 'NPR 50 has been added to your available balance for joining through a referral.', type: 'referral', read: false, created_at: now },
-  ]);
+  if (!supabase || !referralCode?.trim()) return null;
+  const { data, error } = await supabase.rpc('process_referral_reward', { p_referred_user_id: referredUserId });
+  if (error) throw new Error(`Referral reward processing failed: ${error.message}`);
+  return data;
 }
 
 async function reconcileSupabaseReferrals() {
-  if (!supabase) return;
-  const { data: profiles } = await supabase.from('profiles').select('id, full_name, email, referred_by').not('referred_by', 'is', null);
-  await Promise.all((profiles || []).map((profile: any) => applySupabaseSignupReferral(profile.id, profile.full_name, profile.email, profile.referred_by)));
+  return;
 }
 
 async function reconcileSupabaseReferralForUser(email: string) {
@@ -904,6 +843,7 @@ app.post('/api/auth/session', async (req, res) => {
   const user = db.users.find((candidate: any) => candidate.email.toLowerCase() === email);
   const pending = PENDING_REGISTRATIONS.get(email);
   if (!user && !pending) return res.status(404).json({ error: 'CapitalNest account was not found.' });
+  let referralRewardResult: any = null;
 
   if (supabase && data.user) {
     const metadata = data.user.user_metadata || {};
@@ -924,7 +864,7 @@ app.post('/api/auth/session', async (req, res) => {
     if (profileError) console.error(`Supabase profile save failed: ${profileError.message}`);
     const { error: walletError } = await supabase.from('wallets').upsert({ user_id: data.user.id }, { onConflict: 'user_id' });
     if (walletError) console.error(`Supabase wallet save failed: ${walletError.message}`);
-    await applySupabaseSignupReferral(
+    referralRewardResult = await applySupabaseSignupReferral(
       data.user.id,
       profilePayload.full_name,
       email,
@@ -979,7 +919,7 @@ app.post('/api/auth/session', async (req, res) => {
     PENDING_REGISTRATIONS.delete(email);
     const token = generateToken(newUser);
     const { passwordHash, ...safeUser } = newUser;
-    return res.json({ message: 'Session created', token, user: safeUser, wallet: newWallet });
+    return res.json({ message: 'Session created', token, user: safeUser, wallet: newWallet, referralRewarded: referralRewardResult?.rewarded === true });
   }
 
   user.emailVerified = true;
@@ -999,7 +939,7 @@ app.post('/api/auth/session', async (req, res) => {
     updatedAt: new Date().toISOString(),
   };
   const { passwordHash, ...safeUser } = user;
-  return res.json({ message: 'Session created', token, user: safeUser, wallet });
+  return res.json({ message: 'Session created', token, user: safeUser, wallet, referralRewarded: referralRewardResult?.rewarded === true });
 });
 
 // Login
@@ -1087,6 +1027,27 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   await reconcileSupabaseReferralForUser(user.email);
   const db = readDb();
+  if (supabase) {
+    const { data: profile } = await supabase.from('profiles').select('*').eq('email', user.email).maybeSingle();
+    if (profile) {
+      Object.assign(user, {
+        id: profile.id,
+        email: profile.email,
+        fullName: profile.full_name,
+        phone: profile.phone,
+        avatar: profile.avatar,
+        role: profile.role,
+        referralCode: profile.referral_code,
+        referredBy: profile.referred_by || undefined,
+        kycStatus: profile.kyc_status,
+        kycDocumentType: profile.kyc_document_type,
+        kycDocumentNumber: profile.kyc_document_number,
+        twoFactorEnabled: profile.two_factor_enabled,
+        isBlocked: profile.is_blocked,
+        createdAt: profile.created_at,
+      });
+    }
+  }
   let wallet = db.wallets.find((w: any) => w.userId === user.id) || {
     userId: user.id,
     availableBalance: 0,
@@ -1702,7 +1663,6 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const db = readDb();
   if (supabase) {
-    await reconcileSupabaseReferrals();
     const [{ data: profile }, { data: referrals }, { data: wallet }, { data: investments }] = await Promise.all([
       supabase.from('profiles').select('id, referral_code').eq('email', user.email).maybeSingle(),
       supabase.from('referrals').select('*').order('created_at', { ascending: false }),
@@ -1738,13 +1698,14 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
       });
       return res.json({
         referralCode: profile.referral_code,
-        referralLink: `${req.protocol}://${req.get('host')}/?ref=${profile.referral_code}`,
+        referralLink: `${req.protocol}://${req.get('host')}/register?ref=${profile.referral_code}`,
         totalReferrals: referralHistory.length,
-        activeReferrals: referralHistory.filter((referral: any) => referral.status === 'active').length,
+        activeReferrals: referralHistory.filter((referral: any) => referral.status === 'successful' || referral.status === 'active').length,
         totalBonusEarned: referralHistory.reduce((sum: number, referral: any) => sum + referral.bonusEarned, 0),
         totalReferred: referralHistory.length,
         totalEarnings: referralHistory.reduce((sum: number, referral: any) => sum + referral.commissionEarned, 0),
         referralEarnings: Number(liveWallet?.referral_earnings || wallet?.referral_earnings || 0),
+        pendingReferrals: referralHistory.filter((referral: any) => referral.status === 'pending').length,
         commissionRate: 5,
         referralHistory,
         referees: referralHistory,
@@ -1754,18 +1715,19 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
 
   const userReferrals = db.referrals.filter((r: any) => r.referrerId === user.id);
   const totalBonus = userReferrals.reduce((sum: number, r: any) => sum + (r.bonusEarned || 0), 0);
-  const activeCount = userReferrals.filter((r: any) => r.status === 'active').length;
+  const activeCount = userReferrals.filter((r: any) => r.status === 'successful' || r.status === 'active').length;
   const wallet = db.wallets.find((candidate: any) => candidate.userId === user.id);
 
   res.json({
     referralCode: user.referralCode,
-    referralLink: `${req.protocol}://${req.get('host')}/?ref=${user.referralCode}`,
+    referralLink: `${req.protocol}://${req.get('host')}/register?ref=${user.referralCode}`,
     totalReferrals: userReferrals.length,
     activeReferrals: activeCount,
     totalBonusEarned: totalBonus,
     totalReferred: userReferrals.length,
     totalEarnings: totalBonus,
     referralEarnings: wallet?.referralEarnings || 0,
+    pendingReferrals: userReferrals.filter((referral: any) => referral.status === 'pending').length,
     commissionRate: 5, // 5%
     referralHistory: userReferrals,
     referees: userReferrals,
@@ -2070,7 +2032,6 @@ app.get('/api/admin/analytics', adminMiddleware, (req, res) => {
 app.get('/api/admin/users', adminMiddleware, async (req, res) => {
   const db = readDb();
   if (supabase) {
-    await reconcileSupabaseReferrals();
     const [{ data: profiles, error: profilesError }, { data: wallets, error: walletsError }, { data: investments, error: investmentsError }, { data: referrals, error: referralsError }] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('wallets').select('*'),
@@ -2174,6 +2135,51 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
   });
 
   res.json(safeUsers);
+});
+
+app.get('/api/admin/referrals', adminMiddleware, async (_req, res) => {
+  const db = readDb();
+  if (supabase) {
+    const [{ data: profiles }, { data: referrals }] = await Promise.all([
+      supabase.from('profiles').select('id, full_name, email'),
+      supabase.from('referrals').select('*').order('created_at', { ascending: false }),
+    ]);
+    const profileById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+    return res.json((referrals || []).map((referral: any) => {
+      const referrer = profileById.get(referral.referrer_id) as any;
+      const referred = profileById.get(referral.referred_user_id) as any;
+      return {
+        id: referral.id,
+        referrerName: referrer?.full_name || referral.referrer_id,
+        referrerEmail: referrer?.email || '',
+        referredUserName: referred?.full_name || referral.referred_user_id,
+        referredUserEmail: referred?.email || '',
+        referralCode: referral.referral_code,
+        referrerReward: Number(referral.referrer_reward),
+        referredReward: Number(referral.referred_reward),
+        status: referral.status,
+        createdAt: referral.created_at,
+        rewardedAt: referral.rewarded_at || undefined,
+      };
+    }));
+  }
+  res.json(db.referrals.map((referral: any) => {
+    const referrer = db.users.find((candidate: any) => candidate.id === referral.referrerId);
+    const referred = db.users.find((candidate: any) => candidate.id === referral.referredUserId);
+    return {
+      id: referral.id,
+      referrerName: referrer?.fullName || referral.referrerId,
+      referrerEmail: referrer?.email || '',
+      referredUserName: referred?.fullName || referral.referredUserName || referral.referredUserId,
+      referredUserEmail: referred?.email || referral.referredUserEmail || '',
+      referralCode: referrer?.referralCode || referral.referralCode || '',
+      referrerReward: Number(referral.referrerReward || referral.bonusEarned || 100),
+      referredReward: Number(referral.referredReward || 50),
+      status: referral.status === 'active' ? 'successful' : referral.status,
+      createdAt: referral.createdAt,
+      rewardedAt: referral.rewardedAt,
+    };
+  }));
 });
 
 // Admin Adjust User Balance

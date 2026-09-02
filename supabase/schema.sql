@@ -121,12 +121,27 @@ create table if not exists public.referrals (
   id text primary key,
   referrer_id uuid not null references public.profiles(id) on delete cascade,
   referred_user_id uuid not null references public.profiles(id) on delete cascade,
+  referral_code text not null default '',
+  referrer_reward numeric not null default 100 check (referrer_reward = 100),
+  referred_reward numeric not null default 50 check (referred_reward = 50),
   total_invested_by_referred numeric not null default 0,
   bonus_earned numeric not null default 0,
-  status text not null default 'pending',
+  status text not null default 'pending' check (status in ('pending', 'successful')),
   created_at timestamptz not null default now(),
+  rewarded_at timestamptz,
   unique (referrer_id, referred_user_id)
 );
+
+alter table public.referrals add column if not exists referral_code text not null default '';
+alter table public.referrals add column if not exists referrer_reward numeric not null default 100;
+alter table public.referrals add column if not exists referred_reward numeric not null default 50;
+alter table public.referrals add column if not exists rewarded_at timestamptz;
+update public.referrals set referrer_reward = 100, referred_reward = 50, status = case when status = 'active' then 'successful' else status end where referrer_reward is null or referred_reward is null or status = 'active';
+alter table public.referrals drop constraint if exists referrals_status_check;
+alter table public.referrals add constraint referrals_status_check check (status in ('pending', 'successful'));
+create unique index if not exists referrals_referred_user_unique on public.referrals(referred_user_id);
+create index if not exists referrals_status_idx on public.referrals(status);
+create index if not exists referrals_code_idx on public.referrals(referral_code);
 
 create table if not exists public.notifications (
   id text primary key,
@@ -182,65 +197,71 @@ create index if not exists profiles_registration_device_idx on public.profiles(r
 drop index if exists profiles_registration_ip_unique;
 create unique index if not exists profiles_registration_device_unique on public.profiles(registration_device_id) where registration_device_id is not null;
 
-create or replace function public.apply_signup_referral()
-returns trigger
+drop trigger if exists profiles_signup_referral_trigger on public.profiles;
+drop function if exists public.apply_signup_referral();
+
+create or replace function public.process_referral_reward(p_referred_user_id uuid)
+returns jsonb
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
+  referred_user profiles%rowtype;
   referrer profiles%rowtype;
-  inserted_referral_id text;
+  referral_row referrals%rowtype;
 begin
-  if new.referred_by is null or btrim(new.referred_by) = '' then
-    return new;
+  if auth.uid() is distinct from p_referred_user_id and auth.role() <> 'service_role' then
+    raise exception 'You may only process your own referral reward';
   end if;
 
-  select * into referrer
-  from public.profiles
-  where upper(referral_code) = upper(btrim(new.referred_by))
-    and id <> new.id
-  limit 1;
+  select * into referred_user from public.profiles where id = p_referred_user_id for update;
+  if not found then raise exception 'Referred user does not exist'; end if;
+  if referred_user.referred_by is null or btrim(referred_user.referred_by) = '' then
+    return jsonb_build_object('rewarded', false, 'reason', 'no_referrer');
+  end if;
+
+  select * into referrer from public.profiles
+  where upper(referral_code) = upper(btrim(referred_user.referred_by))
+    and id <> p_referred_user_id
+  for update;
+  if not found then return jsonb_build_object('rewarded', false, 'reason', 'invalid_referrer'); end if;
+
+  select * into referral_row from public.referrals
+  where referred_user_id = p_referred_user_id
+  for update;
+  if found and referral_row.status = 'successful' then
+    return jsonb_build_object('rewarded', false, 'reason', 'already_rewarded', 'referral_id', referral_row.id);
+  end if;
 
   if not found then
-    return new;
+    insert into public.referrals (id, referrer_id, referred_user_id, referral_code, referrer_reward, referred_reward, bonus_earned, status, rewarded_at)
+    values ('ref_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, p_referred_user_id, upper(btrim(referred_user.referred_by)), 100, 50, 100, 'successful', now())
+    returning * into referral_row;
+  else
+    if referral_row.referrer_id <> referrer.id then raise exception 'Referral already belongs to another referrer'; end if;
+    update public.referrals set status = 'successful', referrer_reward = 100, referred_reward = 50, bonus_earned = 100, rewarded_at = now()
+    where id = referral_row.id returning * into referral_row;
   end if;
 
-  insert into public.referrals (id, referrer_id, referred_user_id, total_invested_by_referred, bonus_earned, status)
-  values ('ref_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, new.id, 0, 100, 'active')
-  on conflict (referrer_id, referred_user_id) do nothing
-  returning id into inserted_referral_id;
-
-  if inserted_referral_id is null then
-    return new;
-  end if;
-
-  insert into public.wallets (user_id, referral_earnings, available_balance)
-  values (referrer.id, 100, 0)
-  on conflict (user_id) do update set referral_earnings = public.wallets.referral_earnings + 100, updated_at = now();
-
-  insert into public.wallets (user_id, available_balance)
-  values (new.id, 50)
-  on conflict (user_id) do update set available_balance = public.wallets.available_balance + 50, updated_at = now();
+  insert into public.wallets (user_id) values (referrer.id) on conflict (user_id) do nothing;
+  update public.wallets set referral_earnings = referral_earnings + 100, updated_at = now() where user_id = referrer.id;
+  insert into public.wallets (user_id) values (p_referred_user_id) on conflict (user_id) do nothing;
+  update public.wallets set available_balance = available_balance + 50, updated_at = now() where user_id = p_referred_user_id;
 
   insert into public.transactions (id, user_id, type, direction, amount, reference, description, status)
   values
-    ('tx_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'referral_bonus', 'in', 100, 'REF-SIGNUP-' || upper(new.id::text), 'NPR 100 referral bonus for inviting ' || new.full_name, 'completed'),
-    ('tx_' || replace(gen_random_uuid()::text, '-', ''), new.id, 'referral_bonus', 'in', 50, 'WELCOME-REF-' || upper(new.id::text), 'NPR 50 referral signup welcome bonus', 'completed');
-
+    ('tx_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'referral_bonus', 'in', 100, 'REF-SIGNUP-' || upper(p_referred_user_id::text), 'NPR 100 referral bonus for inviting ' || referred_user.full_name, 'completed'),
+    ('tx_' || replace(gen_random_uuid()::text, '-', ''), p_referred_user_id, 'referral_bonus', 'in', 50, 'WELCOME-REF-' || upper(p_referred_user_id::text), 'NPR 50 referral signup welcome bonus', 'completed');
   insert into public.notifications (id, user_id, title, message, type, read)
   values
-    ('notif_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'New Referral Registered!', new.full_name || ' registered using your referral code. NPR 100 has been added to your referral earnings.', 'referral', false),
-    ('notif_' || replace(gen_random_uuid()::text, '-', ''), new.id, 'Referral Welcome Bonus Added!', 'NPR 50 has been added to your available balance for joining through a referral.', 'referral', false);
-
-  return new;
+    ('notif_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'Referral Successful', 'You earned NPR 100 from your referral.', 'referral', false),
+    ('notif_' || replace(gen_random_uuid()::text, '-', ''), p_referred_user_id, 'Welcome Bonus', 'You received NPR 50 referral bonus.', 'referral', false);
+  return jsonb_build_object('rewarded', true, 'referral_id', referral_row.id, 'referrer_reward', 100, 'referred_reward', 50);
 end;
 $$;
-
-drop trigger if exists profiles_signup_referral_trigger on public.profiles;
-create trigger profiles_signup_referral_trigger
-after insert on public.profiles
-for each row execute function public.apply_signup_referral();
+revoke all on function public.process_referral_reward(uuid) from public;
+grant execute on function public.process_referral_reward(uuid) to authenticated, service_role;
 
 alter table public.profiles enable row level security;
 alter table public.wallets enable row level security;
@@ -255,14 +276,51 @@ alter table public.support_tickets enable row level security;
 alter table public.payment_settings enable row level security;
 alter table public.app_state enable row level security;
 
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_rel pr
+    join pg_publication p on p.oid = pr.prpubid
+    join pg_class c on c.oid = pr.prrelid
+    where p.pubname = 'supabase_realtime' and c.relname = 'wallets'
+  ) then alter publication supabase_realtime add table public.wallets; end if;
+  if not exists (
+    select 1 from pg_publication_rel pr
+    join pg_publication p on p.oid = pr.prpubid
+    join pg_class c on c.oid = pr.prrelid
+    where p.pubname = 'supabase_realtime' and c.relname = 'referrals'
+  ) then alter publication supabase_realtime add table public.referrals; end if;
+end $$;
+
 create or replace function public.is_admin()
 returns boolean language sql stable security definer set search_path = public
 as $$ select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'); $$;
 
+create or replace function public.protect_profile_fields()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    new.role := old.role;
+    new.referral_code := old.referral_code;
+    new.referred_by := old.referred_by;
+    new.email_verified := old.email_verified;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists protect_profile_fields_trigger on public.profiles;
+create trigger protect_profile_fields_trigger before update on public.profiles for each row execute function public.protect_profile_fields();
+
 drop policy if exists "profiles own or admin" on public.profiles;
-create policy "profiles own or admin" on public.profiles for all using (id = auth.uid() or public.is_admin()) with check (id = auth.uid() or public.is_admin());
+create policy "profiles readable own or admin" on public.profiles for select using (id = auth.uid() or public.is_admin());
+create policy "profiles update own or admin" on public.profiles for update using (id = auth.uid() or public.is_admin()) with check (id = auth.uid() or public.is_admin());
 drop policy if exists "wallets own or admin" on public.wallets;
-create policy "wallets own or admin" on public.wallets for all using (user_id = auth.uid() or public.is_admin()) with check (user_id = auth.uid() or public.is_admin());
+create policy "wallets readable own or admin" on public.wallets for select using (user_id = auth.uid() or public.is_admin());
+create policy "wallets admin write" on public.wallets for update using (public.is_admin()) with check (public.is_admin());
 drop policy if exists "plans readable" on public.investment_plans;
 create policy "plans readable" on public.investment_plans for select using (true);
 drop policy if exists "plans admin write" on public.investment_plans;
@@ -276,7 +334,8 @@ create policy "withdrawals own or admin" on public.withdrawals for all using (us
 drop policy if exists "transactions own or admin" on public.transactions;
 create policy "transactions own or admin" on public.transactions for all using (user_id = auth.uid() or public.is_admin()) with check (user_id = auth.uid() or public.is_admin());
 drop policy if exists "referrals involved or admin" on public.referrals;
-create policy "referrals involved or admin" on public.referrals for all using (referrer_id = auth.uid() or referred_user_id = auth.uid() or public.is_admin()) with check (referrer_id = auth.uid() or public.is_admin());
+create policy "referrals involved or admin" on public.referrals for select using (referrer_id = auth.uid() or referred_user_id = auth.uid() or public.is_admin());
+create policy "referrals admin write" on public.referrals for update using (public.is_admin()) with check (public.is_admin());
 drop policy if exists "notifications own or admin" on public.notifications;
 create policy "notifications own or admin" on public.notifications for all using (user_id = auth.uid() or public.is_admin()) with check (user_id = auth.uid() or public.is_admin());
 drop policy if exists "tickets own or admin" on public.support_tickets;

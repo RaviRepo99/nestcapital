@@ -15,6 +15,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { ReferralStats } from '../types';
+import { supabase } from '../lib/supabase';
 
 export const ReferralsPage: React.FC = () => {
   const { user, showToast } = useAuth();
@@ -23,7 +24,7 @@ export const ReferralsPage: React.FC = () => {
   const [copied, setCopied] = useState(false);
 
   const referralCode = user?.referralCode || 'CAPNEST2025';
-  const referralLink = `${window.location.origin}?ref=${referralCode}`;
+  const referralLink = `${window.location.origin}/register?ref=${referralCode}`;
 
   useEffect(() => {
     const fetchReferrals = async () => {
@@ -38,7 +39,12 @@ export const ReferralsPage: React.FC = () => {
       }
     };
     fetchReferrals();
-  }, []);
+    const channel = supabase
+      .channel(`referral-updates-${user?.id || 'anonymous'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'referrals', filter: `referrer_id=eq.${user?.id}` }, () => void fetchReferrals())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   const handleCopy = async (text: string) => {
     const success = await copyToClipboard(text);
@@ -75,11 +81,11 @@ export const ReferralsPage: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
           <span className="text-xs text-slate-500 font-semibold block mb-1">Total Referees</span>
           <div className="text-2xl font-black font-display text-slate-900">
-            {stats?.totalReferred || 0} Friends
+            {stats?.totalReferrals || 0} Friends
           </div>
           <span className="text-[11px] text-slate-400">Joined using your invitation</span>
         </div>
@@ -95,9 +101,15 @@ export const ReferralsPage: React.FC = () => {
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
           <span className="text-xs text-slate-500 font-semibold block mb-1">Commission Tier</span>
           <div className="text-2xl font-black font-display text-amber-500">
-            5.0% - 10.0%
+            {stats?.activeReferrals || 0} Successful
           </div>
           <span className="text-[11px] text-slate-400">Scales with team volume</span>
+        </div>
+
+        <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
+          <span className="text-xs text-slate-500 font-semibold block mb-1">Pending Referrals</span>
+          <div className="text-2xl font-black font-display text-slate-900">{stats?.pendingReferrals || 0}</div>
+          <span className="text-[11px] text-slate-400">Awaiting verified completion</span>
         </div>
       </div>
 

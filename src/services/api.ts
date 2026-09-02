@@ -12,6 +12,7 @@ import {
   Wallet,
   Withdrawal,
   AdminAnalytics,
+  AdminReferralRecord,
 } from '../types';
 
 const TOKEN_KEY = 'capitalnest_auth_token';
@@ -274,6 +275,10 @@ export const api = {
 
     async getUsers(): Promise<(User & { wallet: Wallet; investmentsCount: number; referrer?: string | null; referralEarnings?: number; investments?: Partial<Investment>[] })[]> {
       return request('/api/admin/users');
+    },
+
+    async getReferrals(): Promise<AdminReferralRecord[]> {
+      return request('/api/admin/referrals');
     },
 
     async adjustUserBalance(userId: string, data: { action: 'add' | 'deduct' | 'set'; amount: number; reason?: string }): Promise<{ wallet: Wallet; message: string }> {

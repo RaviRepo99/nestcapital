@@ -33,7 +33,9 @@ import {
   Wallet,
   Withdrawal,
   PaymentSetting,
+  AdminReferralRecord,
 } from '../types';
+import { supabase } from '../lib/supabase';
 
 export const AdminPage: React.FC = () => {
   const { user, isAdmin, showToast } = useAuth();
@@ -50,6 +52,9 @@ export const AdminPage: React.FC = () => {
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [paymentSettings, setPaymentSettings] = useState<PaymentSetting[]>([]);
+  const [referrals, setReferrals] = useState<AdminReferralRecord[]>([]);
+  const [referralSearch, setReferralSearch] = useState('');
+  const [referralStatus, setReferralStatus] = useState<'all' | 'pending' | 'successful'>('all');
   const [loading, setLoading] = useState(true);
 
   // Modal States
@@ -80,6 +85,7 @@ export const AdminPage: React.FC = () => {
         plansData,
         ticketData,
         paymentSettingsData,
+        referralData,
       ] = await Promise.all([
         api.admin.getAnalytics(),
         api.admin.getDeposits(),
@@ -89,6 +95,7 @@ export const AdminPage: React.FC = () => {
         api.admin.getPlans(),
         api.admin.getTickets(),
         api.getPaymentSettings(),
+        api.admin.getReferrals(),
       ]);
 
       setAnalytics(analyticsData);
@@ -99,6 +106,7 @@ export const AdminPage: React.FC = () => {
       setPlans(plansData);
       setTickets(ticketData);
       setPaymentSettings(paymentSettingsData);
+      setReferrals(referralData);
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
     } finally {
@@ -109,6 +117,16 @@ export const AdminPage: React.FC = () => {
   useEffect(() => {
     loadAllAdminData();
   }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const channel = supabase
+      .channel('admin-referral-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'referrals' }, () => void loadAllAdminData())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets' }, () => void loadAllAdminData())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [isAdmin]);
 
   if (!isAdmin) {
     return (
@@ -310,6 +328,13 @@ export const AdminPage: React.FC = () => {
   };
 
   const referralRecords = usersList.flatMap((registeredUser) => registeredUser.referralsGiven || []);
+  const filteredReferrals = referrals.filter((referral) => {
+    const query = referralSearch.trim().toLowerCase();
+    const matchesStatus = referralStatus === 'all' || referral.status === referralStatus;
+    const matchesQuery = !query || [referral.referrerName, referral.referrerEmail, referral.referredUserName, referral.referredUserEmail, referral.referralCode].some((value) => value.toLowerCase().includes(query));
+    return matchesStatus && matchesQuery;
+  });
+  const successfulReferrals = referrals.filter((referral) => referral.status === 'successful');
 
   return (
     <div className="w-full min-w-0 space-y-6 pb-16">
@@ -781,10 +806,20 @@ export const AdminPage: React.FC = () => {
 
       {/* INVESTMENTS MANAGEMENT */}
       {activeTab === 'referrals' && (
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            {[
+              ['Total referrals', referrals.length],
+              ['Successful', successfulReferrals.length],
+              ['Pending', referrals.length - successfulReferrals.length],
+              ['Rewards paid', successfulReferrals.length * 2],
+              ['NPR distributed', successfulReferrals.reduce((sum, referral) => sum + referral.referrerReward + referral.referredReward, 0)],
+            ].map(([label, value]) => <div key={String(label)} className="rounded-2xl bg-white border border-slate-200 p-4"><span className="text-[11px] text-slate-400 font-semibold">{label}</span><div className="mt-1 text-xl font-bold text-slate-900">{label === 'NPR distributed' ? formatNPR(Number(value), false) : value}</div></div>)}
+          </div>
+          <div className="bg-white rounded-3xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="font-bold text-sm font-display text-slate-900">Referral Earnings Ledger</h3>
-            <span className="text-xs text-slate-400">{referralRecords.length} referral records</span>
+            <h3 className="font-bold text-sm font-display text-slate-900">Referral Transactions</h3>
+            <div className="flex flex-wrap gap-2"><input value={referralSearch} onChange={(event) => setReferralSearch(event.target.value)} placeholder="Search users or code" className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs" /><select value={referralStatus} onChange={(event) => setReferralStatus(event.target.value as typeof referralStatus)} className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs"><option value="all">All statuses</option><option value="successful">Successful</option><option value="pending">Pending</option></select></div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-600">
@@ -792,25 +827,30 @@ export const AdminPage: React.FC = () => {
                 <tr>
                   <th className="p-3">Referrer</th>
                   <th className="p-3">Referred User</th>
-                  <th className="p-3">Referred Investment</th>
-                  <th className="p-3">Referral Earned</th>
+                  <th className="p-3">Referral Code</th>
+                  <th className="p-3">Referrer Reward</th>
+                  <th className="p-3">New User Reward</th>
                   <th className="p-3">Status</th>
-                  <th className="p-3">Joined</th>
+                  <th className="p-3">Created</th>
+                  <th className="p-3">Rewarded</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {referralRecords.map((referral) => (
+                {filteredReferrals.map((referral) => (
                   <tr key={referral.id} className="hover:bg-slate-50/70">
                     <td className="p-3"><div className="font-bold text-slate-900">{referral.referrerName}</div><div className="text-[11px] text-slate-400">{referral.referrerEmail}</div></td>
                     <td className="p-3"><div className="font-semibold text-slate-900">{referral.referredUserName}</div><div className="text-[11px] text-slate-400">{referral.referredUserEmail}</div></td>
-                    <td className="p-3 font-bold text-slate-900">{formatNPR(referral.totalInvestedByReferred)}</td>
-                    <td className="p-3 font-bold text-emerald-600">{formatNPR(referral.bonusEarned)}</td>
+                    <td className="p-3 font-mono font-bold text-slate-900">{referral.referralCode}</td>
+                    <td className="p-3 font-bold text-emerald-600">+{formatNPR(referral.referrerReward)}</td>
+                    <td className="p-3 font-bold text-emerald-600">+{formatNPR(referral.referredReward)}</td>
                     <td className="p-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${getStatusBadgeClass(referral.status)}`}>{referral.status}</span></td>
                     <td className="p-3 text-slate-400">{formatDate(referral.createdAt)}</td>
+                    <td className="p-3 text-slate-400">{referral.rewardedAt ? formatDate(referral.rewardedAt) : '—'}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
           </div>
         </div>
       )}

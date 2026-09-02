@@ -44,6 +44,7 @@ export const EmailVerificationPage: React.FC = () => {
         if (currentSession?.user.email_confirmed_at && currentSession.access_token) {
           await completeEmailVerification(currentSession.access_token);
           sessionStorage.removeItem('capitalnest_pending_email');
+          sessionStorage.removeItem('capitalnest_referral_code');
           return;
         }
         console.error('Supabase email OTP verification failed:', {
@@ -69,6 +70,7 @@ export const EmailVerificationPage: React.FC = () => {
       }
       await completeEmailVerification(session.access_token);
       sessionStorage.removeItem('capitalnest_pending_email');
+      sessionStorage.removeItem('capitalnest_referral_code');
     } catch (err: any) {
       setError(err.message || 'Invalid or expired verification code.');
     } finally {

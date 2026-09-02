@@ -11,7 +11,7 @@ export const RegisterPage: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [referralCode, setReferralCode] = useState('');
+  const [referralCode, setReferralCode] = useState(() => sessionStorage.getItem('capitalnest_referral_code') || '');
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -19,7 +19,11 @@ export const RegisterPage: React.FC = () => {
 
   useEffect(() => {
     const referralFromUrl = new URLSearchParams(window.location.search).get('ref');
-    if (referralFromUrl) setReferralCode(referralFromUrl.toUpperCase());
+    if (referralFromUrl) {
+      const normalizedReferral = referralFromUrl.trim().toUpperCase();
+      setReferralCode(normalizedReferral);
+      sessionStorage.setItem('capitalnest_referral_code', normalizedReferral);
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,6 +58,7 @@ export const RegisterPage: React.FC = () => {
     try {
       setLoading(true);
       sessionStorage.setItem('capitalnest_pending_email', email.trim().toLowerCase());
+      if (referralCode.trim()) sessionStorage.setItem('capitalnest_referral_code', referralCode.trim().toUpperCase());
       sessionStorage.setItem('capitalnest_verification_sent_at', String(Date.now()));
       await register({
         fullName: fullName.trim(),

@@ -156,7 +156,7 @@ export interface ReferralRecord {
   referredUserId: string;
   referredUserName: string;
   referredUserEmail: string;
-  status: 'pending' | 'active';
+  status: 'pending' | 'successful' | 'active';
   totalInvestedByReferred: number;
   bonusEarned: number;
   createdAt: string;
@@ -171,9 +171,24 @@ export interface ReferralStats {
   totalReferred?: number;
   totalEarnings?: number;
   referralEarnings?: number;
+  pendingReferrals?: number;
   commissionRate: number; // e.g. 5%
   referralHistory: ReferralRecord[];
   referees?: ReferralRecord[];
+}
+
+export interface AdminReferralRecord {
+  id: string;
+  referrerName: string;
+  referrerEmail: string;
+  referredUserName: string;
+  referredUserEmail: string;
+  referralCode: string;
+  referrerReward: number;
+  referredReward: number;
+  status: 'pending' | 'successful';
+  createdAt: string;
+  rewardedAt?: string;
 }
 
 export interface NotificationItem {
@@ -235,4 +250,5 @@ export interface AuthResponse {
   wallet?: Wallet;
   token?: string;
   emailVerificationRequired?: boolean;
+  referralRewarded?: boolean;
 }

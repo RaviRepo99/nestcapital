@@ -123,6 +123,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!user) return;
 
+    const channel = supabase
+      .channel(`wallet-updates-${user.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets', filter: `user_id=eq.${user.id}` }, () => {
+        void refreshUserData();
+      })
+      .subscribe();
+
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') void refreshUserData();
     };
@@ -130,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
+      void supabase.removeChannel(channel);
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
@@ -194,6 +202,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(res.user);
     setWallet(res.wallet);
     showToast('Email verified successfully. Welcome to CapitalNest Nepal.', 'success');
+    if (res.referralRewarded) {
+      showToast('Welcome Bonus: You received NPR 50 referral bonus.', 'success');
+    }
     navigate('dashboard');
   };
 
