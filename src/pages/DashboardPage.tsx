@@ -35,6 +35,7 @@ export const DashboardPage: React.FC = () => {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showReferralAd, setShowReferralAd] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -64,6 +65,23 @@ export const DashboardPage: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-12">
+      {showReferralAd && (
+        <div className="relative overflow-hidden rounded-3xl border border-amber-200 bg-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => setShowReferralAd(false)}
+            className="absolute right-3 top-3 z-10 rounded-full bg-slate-900/80 p-2 text-white transition hover:bg-slate-900"
+            aria-label="Close referral advertisement"
+            title="Close"
+          >
+            <span className="text-base leading-none">X</span>
+          </button>
+          <button type="button" onClick={() => navigate('referrals')} className="block w-full text-left">
+            <img src="/referads.png" alt="Refer and earn rewards" className="h-auto max-h-64 w-full object-cover object-center" />
+          </button>
+        </div>
+      )}
+
       {/* Top Welcome & KYC Status Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-[#0B192C] via-[#0F284E] to-[#07111F] text-white p-5 sm:p-6 rounded-3xl shadow-xl border border-amber-500/20">
         <div>
@@ -438,6 +456,23 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => navigate('referrals')}
+        className="group flex w-full items-center justify-between rounded-3xl border-2 border-amber-300 bg-white p-5 text-left shadow-sm transition hover:border-amber-500 hover:bg-amber-50/40"
+      >
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-700">
+            <Users className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-slate-900">Refer & Earn</div>
+            <div className="text-xs text-slate-500">Share your link and manage all referral rewards</div>
+          </div>
+        </div>
+        <ChevronRight className="h-5 w-5 text-amber-600 transition group-hover:translate-x-1" />
+      </button>
 
       {/* Mandatory Investment Risk Note */}
       <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/70 text-amber-900 text-xs flex items-start gap-2.5">
