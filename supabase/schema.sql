@@ -374,6 +374,24 @@ $$;
 drop trigger if exists ensure_unique_referral_code_trigger on public.profiles;
 create trigger ensure_unique_referral_code_trigger before insert or update of referral_code, full_name on public.profiles for each row execute function public.ensure_unique_referral_code();
 
+do $$
+declare
+  profile_row record;
+  old_code text;
+  new_code text;
+begin
+  for profile_row in select id, referral_code from public.profiles where referral_code !~ '^[0-9]{6}$' loop
+    old_code := profile_row.referral_code;
+    loop
+      new_code := lpad((floor(random() * 900000) + 100000)::text, 6, '0');
+      exit when not exists (select 1 from public.profiles where referral_code = new_code);
+    end loop;
+    update public.profiles set referred_by = new_code where upper(referred_by) = upper(old_code);
+    update public.referrals set referral_code = new_code where upper(referral_code) = upper(old_code);
+    update public.profiles set referral_code = new_code where id = profile_row.id;
+  end loop;
+end $$;
+
 drop policy if exists "profiles own or admin" on public.profiles;
 drop policy if exists "profiles readable own or admin" on public.profiles;
 drop policy if exists "profiles update own or admin" on public.profiles;

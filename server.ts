@@ -101,7 +101,7 @@ function getInitialDb() {
         fullName: 'Aayush Sharma',
         phone: '+977 9841234567',
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=200&h=200&q=80',
-        referralCode: 'AAYUSH77',
+        referralCode: '482917',
         referredBy: undefined,
         kycStatus: 'verified',
         kycDocumentType: 'citizenship',
@@ -118,7 +118,7 @@ function getInitialDb() {
         fullName: 'Chief Investment Officer',
         phone: '+977 9801234567',
         avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=200&h=200&q=80',
-        referralCode: 'ADMINVIP',
+        referralCode: '731604',
         kycStatus: 'verified',
         twoFactorEnabled: true,
         isBlocked: false,
@@ -132,8 +132,8 @@ function getInitialDb() {
         fullName: 'Sarah Thapa',
         phone: '+977 9851098765',
         avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&h=200&q=80',
-        referralCode: 'SARAH99',
-        referredBy: 'AAYUSH77',
+        referralCode: '906251',
+        referredBy: '482917',
         kycStatus: 'verified',
         twoFactorEnabled: false,
         isBlocked: false,
@@ -861,7 +861,7 @@ app.post('/api/auth/session', async (req, res) => {
       full_name: user?.fullName || pending?.fullName || metadata.full_name || '',
       phone: user?.phone || pending?.phone || metadata.phone || '',
       role: user?.role || 'user',
-      referral_code: user?.referralCode || `${String(metadata.full_name || 'USER').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 12)}${Math.floor(100 + Math.random() * 900)}`,
+      referral_code: user?.referralCode || makeUniqueReferralCode(metadata.full_name || 'USER', db.users),
       referred_by: user?.referredBy || pending?.referralCode || metadata.referral_code || null,
       registration_ip: user?.registrationIp || pending?.registrationIp || null,
       registration_device_id: user?.registrationDeviceId || pending?.registrationDeviceId || null,
@@ -1966,7 +1966,8 @@ app.post('/api/admin/admins', adminMiddleware, async (req, res) => {
   });
   if (authError || !created.user) return res.status(400).json({ error: authError?.message || 'Could not create Supabase admin.' });
 
-  const referralCode = `${fullName.split(' ')[0].replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 12)}${Math.floor(100 + Math.random() * 900)}`;
+  const db = readDb();
+  const referralCode = makeUniqueReferralCode(fullName, db.users);
   const { error: profileError } = await supabase.from('profiles').insert({
     id: created.user.id,
     email,
@@ -1979,7 +1980,6 @@ app.post('/api/admin/admins', adminMiddleware, async (req, res) => {
   if (profileError) return res.status(500).json({ error: `Admin Auth created, but profile save failed: ${profileError.message}` });
   await supabase.from('wallets').insert({ user_id: created.user.id });
 
-  const db = readDb();
   const localUser = {
     id: 'usr_' + crypto.randomBytes(8).toString('hex'),
     email,
