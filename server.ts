@@ -387,6 +387,21 @@ function writeDb(data: any) {
   }
 }
 
+function mapSupabaseWallet(wallet: any, userId: string) {
+  return {
+    userId,
+    availableBalance: Number(wallet?.available_balance || 0),
+    investedBalance: Number(wallet?.invested_balance || 0),
+    totalEarnings: Number(wallet?.total_earnings || 0),
+    referralEarnings: Number(wallet?.referral_earnings || 0),
+    totalDeposited: Number(wallet?.total_deposited || 0),
+    totalWithdrawn: Number(wallet?.total_withdrawn || 0),
+    pendingWithdrawals: Number(wallet?.pending_withdrawals || 0),
+    pendingDeposits: Number(wallet?.pending_deposits || 0),
+    updatedAt: wallet?.updated_at || new Date().toISOString(),
+  };
+}
+
 async function hydrateDbFromSupabase() {
   if (!supabase) {
     liveDb = getInitialDb();
@@ -948,10 +963,10 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Get Current User (Me)
-app.get('/api/auth/me', authMiddleware, (req, res) => {
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const db = readDb();
-  const wallet = db.wallets.find((w: any) => w.userId === user.id) || {
+  let wallet = db.wallets.find((w: any) => w.userId === user.id) || {
     userId: user.id,
     availableBalance: 0,
     investedBalance: 0,
@@ -962,6 +977,13 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
     pendingDeposits: 0,
     updatedAt: new Date().toISOString(),
   };
+  if (supabase) {
+    const { data: profile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profile) {
+      const { data: liveWallet } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
+      wallet = mapSupabaseWallet(liveWallet, profile.id);
+    }
+  }
 
   const unreadNotifs = db.notifications.filter((n: any) => n.userId === user.id && !n.read).length;
   const { passwordHash, ...safeUser } = user;
@@ -1467,7 +1489,7 @@ app.post('/api/withdrawals', authMiddleware, (req, res) => {
 // --- WALLET & TRANSACTIONS ---
 
 // Get Wallet
-app.get('/api/wallet', authMiddleware, (req, res) => {
+app.get('/api/wallet', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const db = readDb();
   let wallet = db.wallets.find((w: any) => w.userId === user.id);
@@ -1484,6 +1506,13 @@ app.get('/api/wallet', authMiddleware, (req, res) => {
       pendingDeposits: 0,
       updatedAt: new Date().toISOString(),
     };
+    if (supabase) {
+      const { data: profile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+      if (profile) {
+        const { data: liveWallet } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
+        wallet = mapSupabaseWallet(liveWallet, profile.id);
+      }
+    }
   }
 
   res.json(wallet);
@@ -1525,17 +1554,18 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const db = readDb();
   if (supabase) {
-    const [{ data: profile }, { data: referrals }, { data: wallet }] = await Promise.all([
+    const [{ data: profile }, { data: referrals }, { data: wallet }, { data: investments }] = await Promise.all([
       supabase.from('profiles').select('id, referral_code').eq('email', user.email).maybeSingle(),
       supabase.from('referrals').select('*').order('created_at', { ascending: false }),
       supabase.from('wallets').select('referral_earnings').eq('user_id', user.id).maybeSingle(),
+      supabase.from('investments').select('user_id, amount, status'),
     ]);
     if (profile && referrals) {
       const { data: liveWallet } = await supabase.from('wallets').select('referral_earnings').eq('user_id', profile.id).maybeSingle();
       const userReferrals = referrals.filter((referral: any) => referral.referrer_id === profile.id);
       const referredIds = userReferrals.map((referral: any) => referral.referred_user_id);
       const { data: referredProfiles } = referredIds.length
-        ? await supabase.from('profiles').select('id, full_name, email').in('id', referredIds)
+        ? await supabase.from('profiles').select('id, full_name, email, created_at').in('id', referredIds)
         : { data: [] };
       const profileById = new Map((referredProfiles || []).map((referredProfile: any) => [referredProfile.id, referredProfile]));
       const referralHistory = userReferrals.map((referral: any) => {
@@ -1549,6 +1579,12 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
           totalInvestedByReferred: Number(referral.total_invested_by_referred),
           bonusEarned: Number(referral.bonus_earned),
           createdAt: referral.created_at,
+          fullName: referredProfile?.full_name || referredProfile?.email || referral.referred_user_id,
+          joinedAt: referredProfile?.created_at || referral.created_at,
+          commissionEarned: Number(referral.bonus_earned),
+          investmentActivity: (investments || [])
+            .filter((investment: any) => investment.user_id === referral.referred_user_id)
+            .reduce((sum: number, investment: any) => sum + Number(investment.amount || 0), 0),
         };
       });
       return res.json({
@@ -1558,7 +1594,9 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
         activeReferrals: referralHistory.filter((referral: any) => referral.status === 'active').length,
         totalBonusEarned: referralHistory.reduce((sum: number, referral: any) => sum + referral.bonusEarned, 0),
         totalReferred: referralHistory.length,
+        totalEarnings: referralHistory.reduce((sum: number, referral: any) => sum + referral.commissionEarned, 0),
         referralEarnings: Number(liveWallet?.referral_earnings || wallet?.referral_earnings || 0),
+        commissionRate: 5,
         referralHistory,
         referees: referralHistory,
       });
