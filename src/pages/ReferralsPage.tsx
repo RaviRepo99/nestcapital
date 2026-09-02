@@ -72,10 +72,10 @@ export const ReferralsPage: React.FC = () => {
             <span>CapitalNest Affiliate & Partner Program</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold font-display text-white">
-            Invite Friends & Earn Instant Commissions
+            Invite Friends & Earn Fixed Rewards
           </h1>
           <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-            Share your unique referral link with your network. Whenever a friend deposits and starts an investment plan, you receive up to 10% direct commission credited automatically to your wallet.
+            Share your unique referral link. After your friend verifies their email, you receive NPR 100 and they receive an NPR 50 welcome bonus, credited securely and automatically.
           </p>
         </div>
       </div>
@@ -91,19 +91,19 @@ export const ReferralsPage: React.FC = () => {
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 font-semibold block mb-1">Total Commission Earned</span>
+          <span className="text-xs text-slate-500 font-semibold block mb-1">Total Referral Earnings</span>
           <div className="text-2xl font-black font-display text-emerald-600">
             +{formatNPR(stats?.totalEarnings || 0, false)}
           </div>
-          <span className="text-[11px] text-slate-400">Available for instant withdrawal</span>
+          <span className="text-[11px] text-slate-400">NPR 100 for each successful referral</span>
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 font-semibold block mb-1">Commission Tier</span>
+          <span className="text-xs text-slate-500 font-semibold block mb-1">Fixed Reward</span>
           <div className="text-2xl font-black font-display text-amber-500">
-            {stats?.activeReferrals || 0} Successful
+            NPR 100 + NPR 50
           </div>
-          <span className="text-[11px] text-slate-400">Scales with team volume</span>
+          <span className="text-[11px] text-slate-400">Referrer + new user bonus</span>
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">

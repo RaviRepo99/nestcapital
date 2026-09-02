@@ -914,7 +914,7 @@ app.post('/api/auth/session', async (req, res) => {
       read: false,
       createdAt: new Date().toISOString(),
     });
-    await applySupabaseSignupReferral(newUser.id, newUser.fullName, newUser.email, newUser.referredBy);
+    referralRewardResult = await applySupabaseSignupReferral(newUser.id, newUser.fullName, newUser.email, newUser.referredBy);
     writeDb(db);
     PENDING_REGISTRATIONS.delete(email);
     const token = generateToken(newUser);
