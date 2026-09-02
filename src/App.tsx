@@ -38,14 +38,8 @@ const AppContent: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center" role="status" aria-label="Loading CapitalNest">
-        <div className="flex flex-col items-center gap-4">
-          <img src="/capitalnest.png" alt="CapitalNest Nepal" className="w-56 max-w-[70vw] object-contain" />
-          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-            <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-            Loading your secure account...
-          </div>
-        </div>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center" role="status" aria-label="Loading">
+        <span className="h-7 w-7 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
       </div>
     );
   }

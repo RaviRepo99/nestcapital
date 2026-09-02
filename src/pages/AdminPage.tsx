@@ -77,17 +77,16 @@ export const AdminPage: React.FC = () => {
   const loadAllAdminData = async () => {
     try {
       setLoading(true);
-      const analyticsData = await api.admin.getAnalytics();
-      setAnalytics(analyticsData);
-      setLoading(false);
       setBackgroundLoading(true);
 
-      const [depData, withData, userData, invData, plansData, ticketData, paymentSettingsData, referralData] = await Promise.all([
-        api.admin.getDeposits(), api.admin.getWithdrawals(), api.admin.getUsers(), api.admin.getInvestments(),
-        api.admin.getPlans(), api.admin.getTickets(), api.getPaymentSettings(), api.admin.getReferrals(),
+      const [analyticsData, depData, withData, userData, invData, plansData, ticketData, paymentSettingsData, referralData] = await Promise.all([
+        api.admin.getAnalytics(), api.admin.getDeposits(), api.admin.getWithdrawals(), api.admin.getUsers(),
+        api.admin.getInvestments(), api.admin.getPlans(), api.admin.getTickets(), api.getPaymentSettings(), api.admin.getReferrals(),
       ]);
+      setAnalytics(analyticsData);
       setDeposits(depData); setWithdrawals(withData); setUsersList(userData); setInvestments(invData);
       setPlans(plansData); setTickets(ticketData); setPaymentSettings(paymentSettingsData); setReferrals(referralData);
+      setLoading(false);
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
     } finally {
