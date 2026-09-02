@@ -1337,8 +1337,40 @@ app.get('/api/plans', (req, res) => {
 // --- USER INVESTMENTS ---
 
 // Get user's investments
-app.get('/api/investments', authMiddleware, (req, res) => {
+app.get('/api/investments', authMiddleware, async (req, res) => {
   const user = (req as any).user;
+  if (supabase) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    if (!profile) return res.status(404).json({ error: 'User profile not found.' });
+    const { data: investments, error: investmentsError } = await supabase.from('investments').select('*').eq('user_id', profile.id).order('created_at', { ascending: false });
+    if (investmentsError) return res.status(500).json({ error: investmentsError.message });
+    const now = Date.now();
+    return res.json((investments || []).map((investment: any) => {
+      const start = new Date(investment.start_date).getTime();
+      const end = new Date(investment.end_date).getTime();
+      return {
+        id: investment.id,
+        userId: investment.user_id,
+        planId: investment.plan_id,
+        planName: investment.plan_name,
+        amount: Number(investment.amount),
+        returnRate: Number(investment.return_rate),
+        expectedReturn: Number(investment.expected_return),
+        dailyReturnAmount: Number(investment.daily_return_amount || 0),
+        profitEarnedSoFar: Number(investment.profit_earned_so_far || 0),
+        startDate: investment.start_date,
+        endDate: investment.end_date,
+        nextPayoutDate: investment.next_payout_date,
+        durationDays: investment.duration_days,
+        daysRemaining: Math.max(0, Math.ceil((end - now) / 86400000)),
+        progressPercentage: Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100))),
+        status: investment.status,
+        lastPayoutAt: investment.last_payout_at || undefined,
+        createdAt: investment.created_at,
+      };
+    }));
+  }
   const db = readDb();
   const userInvestments = db.investments.filter((inv: any) => inv.userId === user.id);
 
@@ -1609,8 +1641,16 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
 // --- DEPOSITS ---
 
 // Get user's deposits
-app.get('/api/deposits', authMiddleware, (req, res) => {
+app.get('/api/deposits', authMiddleware, async (req, res) => {
   const user = (req as any).user;
+  if (supabase) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('id, full_name, email').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    if (!profile) return res.status(404).json({ error: 'User profile not found.' });
+    const { data: deposits, error: depositsError } = await supabase.from('deposits').select('*').eq('user_id', profile.id).order('created_at', { ascending: false });
+    if (depositsError) return res.status(500).json({ error: depositsError.message });
+    return res.json((deposits || []).map((deposit: any) => ({ ...mapSupabaseDeposit(deposit), userFullName: profile.full_name, userEmail: profile.email })));
+  }
   const db = readDb();
   const deposits = db.deposits.filter((d: any) => d.userId === user.id);
   res.json(deposits);
@@ -1758,8 +1798,16 @@ app.post('/api/deposits', authMiddleware, async (req, res) => {
 // --- WITHDRAWALS ---
 
 // Get user's withdrawals
-app.get('/api/withdrawals', authMiddleware, (req, res) => {
+app.get('/api/withdrawals', authMiddleware, async (req, res) => {
   const user = (req as any).user;
+  if (supabase) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('id, full_name, email').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    if (!profile) return res.status(404).json({ error: 'User profile not found.' });
+    const { data: withdrawals, error: withdrawalsError } = await supabase.from('withdrawals').select('*').eq('user_id', profile.id).order('created_at', { ascending: false });
+    if (withdrawalsError) return res.status(500).json({ error: withdrawalsError.message });
+    return res.json((withdrawals || []).map((withdrawal: any) => ({ ...mapSupabaseWithdrawal(withdrawal), userFullName: profile.full_name, userEmail: profile.email })));
+  }
   const db = readDb();
   const withdrawals = db.withdrawals.filter((w: any) => w.userId === user.id);
   res.json(withdrawals);
@@ -1948,9 +1996,23 @@ app.get('/api/wallet', authMiddleware, async (req, res) => {
 });
 
 // Get Transactions
-app.get('/api/transactions', authMiddleware, (req, res) => {
+app.get('/api/transactions', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const { type, status, search } = req.query;
+
+  if (supabase) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    if (!profile) return res.status(404).json({ error: 'User profile not found.' });
+    let userTx = (await supabase.from('transactions').select('*').eq('user_id', profile.id).order('created_at', { ascending: false })).data || [];
+    if (type && type !== 'all') userTx = userTx.filter((tx: any) => tx.type === type);
+    if (status && status !== 'all') userTx = userTx.filter((tx: any) => tx.status === status);
+    if (search) {
+      const query = String(search).toLowerCase();
+      userTx = userTx.filter((tx: any) => String(tx.reference).toLowerCase().includes(query) || String(tx.description).toLowerCase().includes(query) || String(tx.amount).includes(query));
+    }
+    return res.json(userTx.map((tx: any) => ({ id: tx.id, userId: tx.user_id, type: tx.type, direction: tx.direction, amount: Number(tx.amount), reference: tx.reference, description: tx.description, status: tx.status, createdAt: tx.created_at })));
+  }
 
   const db = readDb();
   let userTx = db.transactions.filter((tx: any) => tx.userId === user.id);
@@ -2353,7 +2415,44 @@ app.post('/api/admin/admins', adminMiddleware, async (req, res) => {
 });
 
 // Admin Analytics & Summary
-app.get('/api/admin/analytics', adminMiddleware, (req, res) => {
+app.get('/api/admin/analytics', adminMiddleware, async (req, res) => {
+  if (supabase) {
+    const [{ data: users, error: usersError }, { data: deposits, error: depositsError }, { data: investments, error: investmentsError }, { data: transactions, error: transactionsError }, { data: withdrawals, error: withdrawalsError }, { data: tickets, error: ticketsError }] = await Promise.all([
+      supabase.from('profiles').select('id').eq('role', 'user'),
+      supabase.from('deposits').select('amount, status'),
+      supabase.from('investments').select('amount, status'),
+      supabase.from('transactions').select('*').order('created_at', { ascending: false }).limit(10),
+      supabase.from('withdrawals').select('amount, status'),
+      supabase.from('support_tickets').select('status'),
+    ]);
+    const queryError = usersError || depositsError || investmentsError || transactionsError || withdrawalsError || ticketsError;
+    if (queryError) return res.status(500).json({ error: queryError.message });
+    const totalDepositsVolume = (deposits || []).filter((deposit: any) => deposit.status === 'approved').reduce((sum: number, deposit: any) => sum + Number(deposit.amount), 0);
+    const totalInvestedVolume = (investments || []).filter((investment: any) => investment.status === 'active' || investment.status === 'completed').reduce((sum: number, investment: any) => sum + Number(investment.amount), 0);
+    const totalProfitPaid = (transactions || []).filter((transaction: any) => transaction.type === 'profit' && transaction.status === 'completed').reduce((sum: number, transaction: any) => sum + Number(transaction.amount), 0);
+    const totalWithdrawalsVolume = (withdrawals || []).filter((withdrawal: any) => withdrawal.status === 'completed' || withdrawal.status === 'approved').reduce((sum: number, withdrawal: any) => sum + Number(withdrawal.amount), 0);
+    const pendingDepositsCount = (deposits || []).filter((deposit: any) => deposit.status === 'pending').length;
+    const pendingWithdrawalsCount = (withdrawals || []).filter((withdrawal: any) => withdrawal.status === 'pending').length;
+    return res.json({
+      totalUsers: users?.length || 0,
+      totalActiveUsers: new Set((investments || []).map((investment: any) => investment.user_id)).size,
+      totalDepositsVolume,
+      totalInvestedVolume,
+      totalProfitPaid,
+      totalProfit: totalProfitPaid,
+      totalWithdrawalsVolume,
+      pendingDepositsCount,
+      pendingWithdrawalsCount,
+      pendingDeposits: pendingDepositsCount,
+      pendingWithdrawals: pendingWithdrawalsCount,
+      totalDeposited: totalDepositsVolume,
+      totalInvested: totalInvestedVolume,
+      activeInvestmentsCount: (investments || []).filter((investment: any) => investment.status === 'active').length,
+      openTicketsCount: (tickets || []).filter((ticket: any) => ticket.status === 'open' || ticket.status === 'in_progress').length,
+      platformReserveBalance: Math.max(0, totalDepositsVolume - totalWithdrawalsVolume),
+      recentActivity: (transactions || []).map((transaction: any) => ({ id: transaction.id, userId: transaction.user_id, type: transaction.type, direction: transaction.direction, amount: Number(transaction.amount), reference: transaction.reference, description: transaction.description, status: transaction.status, createdAt: transaction.created_at })),
+    });
+  }
   const db = readDb();
 
   const totalUsers = db.users.filter((u: any) => u.role === 'user').length;
@@ -3074,7 +3173,39 @@ app.post('/api/admin/withdrawals/:id/reject', adminMiddleware, async (req, res) 
 });
 
 // Admin Get All Investments
-app.get('/api/admin/investments', adminMiddleware, (req, res) => {
+app.get('/api/admin/investments', adminMiddleware, async (req, res) => {
+  if (supabase) {
+    const [{ data: investments, error: investmentsError }, { data: profiles, error: profilesError }] = await Promise.all([
+      supabase.from('investments').select('*').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, full_name, email'),
+    ]);
+    const queryError = investmentsError || profilesError;
+    if (queryError) return res.status(500).json({ error: queryError.message });
+    const profileById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+    return res.json((investments || []).map((investment: any) => ({
+      id: investment.id,
+      userId: investment.user_id,
+      planId: investment.plan_id,
+      planName: investment.plan_name,
+      amount: Number(investment.amount),
+      returnRate: Number(investment.return_rate),
+      expectedReturn: Number(investment.expected_return),
+      dailyReturnAmount: Number(investment.daily_return_amount || 0),
+      profitEarnedSoFar: Number(investment.profit_earned_so_far || 0),
+      startDate: investment.start_date,
+      endDate: investment.end_date,
+      nextPayoutDate: investment.next_payout_date,
+      durationDays: investment.duration_days,
+      daysRemaining: Number(investment.days_remaining || 0),
+      progressPercentage: Number(investment.progress_percentage || 0),
+      status: investment.status,
+      createdAt: investment.created_at,
+      userFullName: profileById.get(investment.user_id)?.full_name || 'Unknown user',
+      userEmail: profileById.get(investment.user_id)?.email || '',
+      totalEarned: Number(investment.profit_earned_so_far || 0),
+      dailyYield: Number(investment.daily_return_amount || 0),
+    })));
+  }
   const db = readDb();
   res.json(db.investments.map((investment: any) => {
     const owner = db.users.find((candidate: any) => candidate.id === investment.userId);
