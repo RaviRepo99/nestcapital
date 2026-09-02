@@ -116,8 +116,8 @@ export const WithdrawModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden text-slate-900 animate-in fade-in zoom-in-95 my-8">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-slate-950/70 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+      <div className="w-full max-w-lg max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-y-auto text-slate-900 animate-in fade-in zoom-in-95 my-2 sm:my-8">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0B192C] via-[#0F284E] to-[#07111F] text-white p-5 sm:p-6 relative">
           <button
@@ -136,7 +136,7 @@ export const WithdrawModal: React.FC = () => {
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6">
+        <div className="p-4 sm:p-6">
           {submitted ? (
             <div className="text-center py-6 space-y-4">
               <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto ring-8 ring-emerald-50 animate-bounce">
@@ -248,7 +248,7 @@ export const WithdrawModal: React.FC = () => {
                 <label className="text-xs font-bold text-slate-700 block mb-1.5">
                   Payout Method
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                   {[
                     { id: 'bank_account', label: 'Bank Account', icon: Building },
                     { id: 'esewa', label: 'eSewa Wallet', icon: Smartphone },
@@ -261,14 +261,14 @@ export const WithdrawModal: React.FC = () => {
                         key={m.id}
                         type="button"
                         onClick={() => setMethod(m.id as WithdrawalMethod)}
-                        className={`p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 ${
+                        className={`p-2 sm:p-2.5 rounded-xl border text-center transition flex flex-col items-center justify-center gap-1 min-w-0 ${
                           isSelected
                             ? 'border-amber-500 bg-amber-50/60 ring-2 ring-amber-500/20 shadow-xs text-slate-900 font-bold'
                             : 'border-slate-200 hover:bg-slate-50 text-slate-700 font-medium'
                         }`}
                       >
                         <Icon className="w-4 h-4 text-amber-600" />
-                        <span className="text-xs">{m.label}</span>
+                        <span className="text-[10px] sm:text-xs leading-tight">{m.label}</span>
                       </button>
                     );
                   })}
@@ -295,7 +295,7 @@ export const WithdrawModal: React.FC = () => {
                     </select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="text-[11px] font-bold text-slate-700 block mb-1">
                         Account Number *

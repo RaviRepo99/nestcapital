@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { DesktopSidebar } from './components/DesktopSidebar';
@@ -13,25 +13,25 @@ import { KYCModal } from './components/KYCModal';
 import { LiveChatModal } from './components/LiveChatModal';
 
 // Pages
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { EmailVerificationPage } from './pages/EmailVerificationPage';
-import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
-import { ResetPasswordPage } from './pages/ResetPasswordPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { InvestmentsPage } from './pages/InvestmentsPage';
-import { PlansPage } from './pages/PlansPage';
-import { WalletPage } from './pages/WalletPage';
-import { TransactionsPage } from './pages/TransactionsPage';
-import { ReferralsPage } from './pages/ReferralsPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { NotificationsPage } from './pages/NotificationsPage';
-import { SupportPage } from './pages/SupportPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { FAQPage } from './pages/FAQPage';
-import { LegalPage } from './pages/LegalPage';
-import { AdminPage } from './pages/AdminPage';
-import { AdminLoginPage } from './pages/AdminLoginPage';
+const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })));
+const RegisterPage = lazy(() => import('./pages/RegisterPage').then((module) => ({ default: module.RegisterPage })));
+const EmailVerificationPage = lazy(() => import('./pages/EmailVerificationPage').then((module) => ({ default: module.EmailVerificationPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage').then((module) => ({ default: module.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage').then((module) => ({ default: module.ResetPasswordPage })));
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })));
+const InvestmentsPage = lazy(() => import('./pages/InvestmentsPage').then((module) => ({ default: module.InvestmentsPage })));
+const PlansPage = lazy(() => import('./pages/PlansPage').then((module) => ({ default: module.PlansPage })));
+const WalletPage = lazy(() => import('./pages/WalletPage').then((module) => ({ default: module.WalletPage })));
+const TransactionsPage = lazy(() => import('./pages/TransactionsPage').then((module) => ({ default: module.TransactionsPage })));
+const ReferralsPage = lazy(() => import('./pages/ReferralsPage').then((module) => ({ default: module.ReferralsPage })));
+const ProfilePage = lazy(() => import('./pages/ProfilePage').then((module) => ({ default: module.ProfilePage })));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage').then((module) => ({ default: module.NotificationsPage })));
+const SupportPage = lazy(() => import('./pages/SupportPage').then((module) => ({ default: module.SupportPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })));
+const FAQPage = lazy(() => import('./pages/FAQPage').then((module) => ({ default: module.FAQPage })));
+const LegalPage = lazy(() => import('./pages/LegalPage').then((module) => ({ default: module.LegalPage })));
+const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })));
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage').then((module) => ({ default: module.AdminLoginPage })));
 
 const AppContent: React.FC = () => {
   const { currentRoute, isAuthenticated, isLoading, logout } = useAuth();
@@ -145,14 +145,14 @@ const AppContent: React.FC = () => {
         <div className="flex-1 flex max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 gap-6">
           <DesktopSidebar />
           <main className="flex-1 min-w-0 pb-20 md:pb-8">
-            {renderCurrentPage()}
+            <Suspense fallback={<PageLoading />}>{renderCurrentPage()}</Suspense>
           </main>
         </div>
       ) : (
         // Public/Landing Layout
         <main className="flex-1 w-full pb-20 md:pb-0">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-            {renderCurrentPage()}
+            <Suspense fallback={<PageLoading />}>{renderCurrentPage()}</Suspense>
           </div>
         </main>
       )}
@@ -180,3 +180,9 @@ export default function App() {
     </AuthProvider>
   );
 }
+
+const PageLoading: React.FC = () => (
+  <div className="min-h-[40vh] flex items-center justify-center" role="status" aria-label="Loading page">
+    <span className="h-8 w-8 rounded-full border-2 border-amber-500 border-t-transparent animate-spin" />
+  </div>
+);
