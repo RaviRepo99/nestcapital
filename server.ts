@@ -82,6 +82,38 @@ function mapSupabaseTicket(ticket: any): any {
   };
 }
 
+function mapSupabaseDeposit(deposit: any): any {
+  return {
+    id: deposit.id,
+    userId: deposit.user_id,
+    amount: Number(deposit.amount),
+    paymentMethod: deposit.payment_method,
+    paymentReference: deposit.payment_reference,
+    senderName: deposit.sender_name || '',
+    senderAccount: deposit.sender_account || '',
+    paymentProof: deposit.payment_proof || undefined,
+    notes: deposit.notes || '',
+    status: deposit.status,
+    adminNote: deposit.admin_note || undefined,
+    createdAt: deposit.created_at,
+    verifiedAt: deposit.verified_at || undefined,
+  };
+}
+
+function mapSupabaseWithdrawal(withdrawal: any): any {
+  return {
+    id: withdrawal.id,
+    userId: withdrawal.user_id,
+    amount: Number(withdrawal.amount),
+    method: withdrawal.method,
+    accountDetails: withdrawal.account_details || {},
+    status: withdrawal.status,
+    adminNote: withdrawal.admin_note || undefined,
+    createdAt: withdrawal.created_at,
+    processedAt: withdrawal.processed_at || undefined,
+  };
+}
+
 function makeUniqueReferralCode(name: string, users: any[]): string {
   const prefix = name.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 8) || 'USER';
   let code = '';
@@ -1595,7 +1627,7 @@ app.get('/api/deposits', authMiddleware, (req, res) => {
 });
 
 // Submit deposit request
-app.post('/api/deposits', authMiddleware, (req, res) => {
+app.post('/api/deposits', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const { amount, paymentMethod, paymentReference, senderName, senderAccount, paymentProof, notes } = req.body;
 
@@ -1651,6 +1683,68 @@ app.post('/api/deposits', authMiddleware, (req, res) => {
     createdAt: new Date().toISOString(),
   };
 
+  if (supabase) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    if (!profile) return res.status(404).json({ error: 'User profile not found.' });
+
+    const { data: liveWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
+    if (walletError) return res.status(500).json({ error: walletError.message });
+    const depositRow = {
+      id: depositId,
+      user_id: profile.id,
+      amount: depAmount,
+      payment_method: paymentMethod,
+      payment_reference: paymentReference.trim(),
+      sender_name: senderName?.trim() || user.fullName,
+      sender_account: senderAccount?.trim() || '',
+      payment_proof: paymentProof || null,
+      notes: notes?.trim() || '',
+      status: 'pending',
+    };
+    const { error: depositError } = await supabase.from('deposits').insert(depositRow);
+    if (depositError) return res.status(500).json({ error: depositError.message });
+    const { error: transactionError } = await supabase.from('transactions').insert({
+      id: newTx.id,
+      user_id: profile.id,
+      type: 'deposit',
+      direction: 'in',
+      amount: depAmount,
+      reference: paymentReference.trim(),
+      description: newTx.description,
+      status: 'pending',
+    });
+    if (transactionError) return res.status(500).json({ error: transactionError.message });
+    const { error: notificationError } = await supabase.from('notifications').insert({
+      id: newNotif.id,
+      user_id: profile.id,
+      title: newNotif.title,
+      message: newNotif.message,
+      type: newNotif.type,
+      read: false,
+    });
+    if (notificationError) return res.status(500).json({ error: notificationError.message });
+    const walletPayload = {
+      user_id: profile.id,
+      available_balance: Number(liveWallet?.available_balance || 0),
+      invested_balance: Number(liveWallet?.invested_balance || 0),
+      total_earnings: Number(liveWallet?.total_earnings || 0),
+      referral_earnings: Number(liveWallet?.referral_earnings || 0),
+      total_deposited: Number(liveWallet?.total_deposited || 0),
+      total_withdrawn: Number(liveWallet?.total_withdrawn || 0),
+      pending_withdrawals: Number(liveWallet?.pending_withdrawals || 0),
+      pending_deposits: Number(liveWallet?.pending_deposits || 0) + depAmount,
+      updated_at: new Date().toISOString(),
+    };
+    const { data: updatedWallet, error: walletUpdateError } = await supabase.from('wallets').upsert(walletPayload, { onConflict: 'user_id' }).select('*').single();
+    if (walletUpdateError) return res.status(500).json({ error: walletUpdateError.message });
+    return res.status(201).json({
+      message: 'Deposit request submitted successfully. Pending admin verification.',
+      deposit: { ...mapSupabaseDeposit(depositRow), userFullName: user.fullName, userEmail: user.email },
+      wallet: mapSupabaseWallet(updatedWallet, profile.id),
+    });
+  }
+
   // Update pending deposit count on wallet
   const wallet = db.wallets.find((w: any) => w.userId === user.id);
   if (wallet) {
@@ -1682,7 +1776,7 @@ app.get('/api/withdrawals', authMiddleware, (req, res) => {
 });
 
 // Submit withdrawal request
-app.post('/api/withdrawals', authMiddleware, (req, res) => {
+app.post('/api/withdrawals', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const { amount, method, accountDetails } = req.body;
 
@@ -1754,6 +1848,68 @@ app.post('/api/withdrawals', authMiddleware, (req, res) => {
     read: false,
     createdAt: new Date().toISOString(),
   };
+
+  if (supabase) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    if (!profile) return res.status(404).json({ error: 'User profile not found.' });
+    const { data: liveWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
+    if (walletError) return res.status(500).json({ error: walletError.message });
+    const availableBalance = Number(liveWallet?.available_balance || 0);
+    if (availableBalance < wthAmount) {
+      return res.status(400).json({ error: `Insufficient available balance (NPR ${availableBalance.toLocaleString('en-IN')}).` });
+    }
+    const now = new Date().toISOString();
+    const withdrawalRow = {
+      id: withdrawalId,
+      user_id: profile.id,
+      amount: wthAmount,
+      method,
+      account_details: accountDetails,
+      status: 'pending',
+    };
+    const { error: withdrawalError } = await supabase.from('withdrawals').insert(withdrawalRow);
+    if (withdrawalError) return res.status(500).json({ error: withdrawalError.message });
+    const { error: transactionError } = await supabase.from('transactions').insert({
+      id: newTx.id,
+      user_id: profile.id,
+      type: 'withdrawal',
+      direction: 'out',
+      amount: wthAmount,
+      reference: withdrawalId.toUpperCase(),
+      description: newTx.description,
+      status: 'pending',
+    });
+    if (transactionError) return res.status(500).json({ error: transactionError.message });
+    const { error: notificationError } = await supabase.from('notifications').insert({
+      id: newNotif.id,
+      user_id: profile.id,
+      title: newNotif.title,
+      message: newNotif.message,
+      type: newNotif.type,
+      read: false,
+    });
+    if (notificationError) return res.status(500).json({ error: notificationError.message });
+    const walletPayload = {
+      user_id: profile.id,
+      available_balance: availableBalance - wthAmount,
+      invested_balance: Number(liveWallet?.invested_balance || 0),
+      total_earnings: Number(liveWallet?.total_earnings || 0),
+      referral_earnings: Number(liveWallet?.referral_earnings || 0),
+      total_deposited: Number(liveWallet?.total_deposited || 0),
+      total_withdrawn: Number(liveWallet?.total_withdrawn || 0),
+      pending_withdrawals: Number(liveWallet?.pending_withdrawals || 0) + wthAmount,
+      pending_deposits: Number(liveWallet?.pending_deposits || 0),
+      updated_at: now,
+    };
+    const { data: updatedWallet, error: walletUpdateError } = await supabase.from('wallets').upsert(walletPayload, { onConflict: 'user_id' }).select('*').single();
+    if (walletUpdateError) return res.status(500).json({ error: walletUpdateError.message });
+    return res.status(201).json({
+      message: 'Withdrawal request placed successfully. It will be credited after processing.',
+      withdrawal: { ...mapSupabaseWithdrawal(withdrawalRow), userFullName: user.fullName, userEmail: user.email },
+      wallet: mapSupabaseWallet(updatedWallet, profile.id),
+    });
+  }
 
   db.withdrawals.unshift(newWithdrawal);
   db.transactions.unshift(newTx);
@@ -2587,7 +2743,21 @@ app.put('/api/admin/users/:id/kyc', adminMiddleware, async (req, res) => {
 });
 
 // Admin Get All Deposits
-app.get('/api/admin/deposits', adminMiddleware, (req, res) => {
+app.get('/api/admin/deposits', adminMiddleware, async (req, res) => {
+  if (supabase) {
+    const [{ data: deposits, error: depositsError }, { data: profiles, error: profilesError }] = await Promise.all([
+      supabase.from('deposits').select('*').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, full_name, email'),
+    ]);
+    if (depositsError) return res.status(500).json({ error: depositsError.message });
+    if (profilesError) return res.status(500).json({ error: profilesError.message });
+    const profileById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+    return res.json((deposits || []).map((deposit: any) => ({
+      ...mapSupabaseDeposit(deposit),
+      userFullName: profileById.get(deposit.user_id)?.full_name || '',
+      userEmail: profileById.get(deposit.user_id)?.email || '',
+    })));
+  }
   const db = readDb();
   res.json(db.deposits);
 });
@@ -2596,6 +2766,35 @@ app.get('/api/admin/deposits', adminMiddleware, (req, res) => {
 app.post('/api/admin/deposits/:id/approve', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { note } = req.body;
+
+  if (supabase) {
+    const { data: deposit, error: lookupError } = await supabase.from('deposits').select('*').eq('id', id).maybeSingle();
+    if (lookupError) return res.status(500).json({ error: lookupError.message });
+    if (!deposit) return res.status(404).json({ error: 'Deposit request not found.' });
+    if (deposit.status === 'approved') return res.status(400).json({ error: 'Deposit has already been approved.' });
+    const now = new Date().toISOString();
+    const { data: updatedDeposit, error: updateError } = await supabase.from('deposits').update({ status: 'approved', admin_note: note || 'Verified & approved by admin', verified_at: now }).eq('id', id).select('*').single();
+    if (updateError) return res.status(500).json({ error: updateError.message });
+    const { data: currentWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', deposit.user_id).maybeSingle();
+    if (walletError) return res.status(500).json({ error: walletError.message });
+    const { data: updatedWallet, error: walletUpdateError } = await supabase.from('wallets').upsert({
+      user_id: deposit.user_id,
+      available_balance: Number(currentWallet?.available_balance || 0) + Number(deposit.amount),
+      invested_balance: Number(currentWallet?.invested_balance || 0),
+      total_earnings: Number(currentWallet?.total_earnings || 0),
+      referral_earnings: Number(currentWallet?.referral_earnings || 0),
+      total_deposited: Number(currentWallet?.total_deposited || 0) + Number(deposit.amount),
+      total_withdrawn: Number(currentWallet?.total_withdrawn || 0),
+      pending_withdrawals: Number(currentWallet?.pending_withdrawals || 0),
+      pending_deposits: Math.max(0, Number(currentWallet?.pending_deposits || 0) - Number(deposit.amount)),
+      updated_at: now,
+    }, { onConflict: 'user_id' }).select('*').single();
+    if (walletUpdateError) return res.status(500).json({ error: walletUpdateError.message });
+    const { error: transactionError } = await supabase.from('transactions').update({ status: 'completed', description: `Deposit via ${deposit.payment_method.replace('_', ' ').toUpperCase()} (Approved)` }).eq('user_id', deposit.user_id).eq('reference', deposit.payment_reference);
+    if (transactionError) return res.status(500).json({ error: transactionError.message });
+    await supabase.from('notifications').insert({ id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: deposit.user_id, title: 'Deposit Approved', message: `Your deposit of NPR ${Number(deposit.amount).toLocaleString('en-IN')} has been verified and added to your available balance.`, type: 'deposit', read: false });
+    return res.json({ message: 'Deposit approved and wallet credited successfully.', deposit: mapSupabaseDeposit(updatedDeposit), wallet: mapSupabaseWallet(updatedWallet, deposit.user_id) });
+  }
 
   const db = readDb();
   const deposit = db.deposits.find((d: any) => d.id === id);
@@ -2660,9 +2859,25 @@ app.post('/api/admin/deposits/:id/approve', adminMiddleware, async (req, res) =>
 });
 
 // Admin Reject Deposit
-app.post('/api/admin/deposits/:id/reject', adminMiddleware, (req, res) => {
+app.post('/api/admin/deposits/:id/reject', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
+
+  if (supabase) {
+    const { data: deposit, error: lookupError } = await supabase.from('deposits').select('*').eq('id', id).maybeSingle();
+    if (lookupError) return res.status(500).json({ error: lookupError.message });
+    if (!deposit) return res.status(404).json({ error: 'Deposit request not found.' });
+    const { data: updatedDeposit, error: updateError } = await supabase.from('deposits').update({ status: 'rejected', admin_note: reason || 'Payment reference could not be verified.' }).eq('id', id).select('*').single();
+    if (updateError) return res.status(500).json({ error: updateError.message });
+    const { data: currentWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', deposit.user_id).maybeSingle();
+    if (walletError) return res.status(500).json({ error: walletError.message });
+    const { error: walletUpdateError } = await supabase.from('wallets').update({ pending_deposits: Math.max(0, Number(currentWallet?.pending_deposits || 0) - Number(deposit.amount)), updated_at: new Date().toISOString() }).eq('user_id', deposit.user_id);
+    if (walletUpdateError) return res.status(500).json({ error: walletUpdateError.message });
+    const { error: transactionError } = await supabase.from('transactions').update({ status: 'rejected' }).eq('user_id', deposit.user_id).eq('reference', deposit.payment_reference);
+    if (transactionError) return res.status(500).json({ error: transactionError.message });
+    await supabase.from('notifications').insert({ id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: deposit.user_id, title: 'Deposit Rejected', message: `Your deposit request of NPR ${Number(deposit.amount).toLocaleString('en-IN')} was rejected. Reason: ${reason || 'Invalid reference or proof'}.`, type: 'deposit', read: false });
+    return res.json({ message: 'Deposit rejected.', deposit: mapSupabaseDeposit(updatedDeposit) });
+  }
 
   const db = readDb();
   const deposit = db.deposits.find((d: any) => d.id === id);
@@ -2697,7 +2912,21 @@ app.post('/api/admin/deposits/:id/reject', adminMiddleware, (req, res) => {
 });
 
 // Admin Get All Withdrawals
-app.get('/api/admin/withdrawals', adminMiddleware, (req, res) => {
+app.get('/api/admin/withdrawals', adminMiddleware, async (req, res) => {
+  if (supabase) {
+    const [{ data: withdrawals, error: withdrawalsError }, { data: profiles, error: profilesError }] = await Promise.all([
+      supabase.from('withdrawals').select('*').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('id, full_name, email'),
+    ]);
+    if (withdrawalsError) return res.status(500).json({ error: withdrawalsError.message });
+    if (profilesError) return res.status(500).json({ error: profilesError.message });
+    const profileById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+    return res.json((withdrawals || []).map((withdrawal: any) => ({
+      ...mapSupabaseWithdrawal(withdrawal),
+      userFullName: profileById.get(withdrawal.user_id)?.full_name || '',
+      userEmail: profileById.get(withdrawal.user_id)?.email || '',
+    })));
+  }
   const db = readDb();
   res.json(db.withdrawals);
 });
@@ -2706,6 +2935,35 @@ app.get('/api/admin/withdrawals', adminMiddleware, (req, res) => {
 app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { note } = req.body;
+
+  if (supabase) {
+    const { data: withdrawal, error: lookupError } = await supabase.from('withdrawals').select('*').eq('id', id).maybeSingle();
+    if (lookupError) return res.status(500).json({ error: lookupError.message });
+    if (!withdrawal) return res.status(404).json({ error: 'Withdrawal request not found.' });
+    if (withdrawal.status === 'completed') return res.status(400).json({ error: 'Withdrawal already completed.' });
+    const now = new Date().toISOString();
+    const { data: updatedWithdrawal, error: updateError } = await supabase.from('withdrawals').update({ status: 'completed', admin_note: note || 'Processed and transferred via ConnectIPS/Bank', processed_at: now }).eq('id', id).select('*').single();
+    if (updateError) return res.status(500).json({ error: updateError.message });
+    const { data: currentWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', withdrawal.user_id).maybeSingle();
+    if (walletError) return res.status(500).json({ error: walletError.message });
+    const { data: updatedWallet, error: walletUpdateError } = await supabase.from('wallets').upsert({
+      user_id: withdrawal.user_id,
+      available_balance: Number(currentWallet?.available_balance || 0),
+      invested_balance: Number(currentWallet?.invested_balance || 0),
+      total_earnings: Number(currentWallet?.total_earnings || 0),
+      referral_earnings: Number(currentWallet?.referral_earnings || 0),
+      total_deposited: Number(currentWallet?.total_deposited || 0),
+      total_withdrawn: Number(currentWallet?.total_withdrawn || 0) + Number(withdrawal.amount),
+      pending_withdrawals: Math.max(0, Number(currentWallet?.pending_withdrawals || 0) - Number(withdrawal.amount)),
+      pending_deposits: Number(currentWallet?.pending_deposits || 0),
+      updated_at: now,
+    }, { onConflict: 'user_id' }).select('*').single();
+    if (walletUpdateError) return res.status(500).json({ error: walletUpdateError.message });
+    const { error: transactionError } = await supabase.from('transactions').update({ status: 'completed', description: `Withdrawal to ${withdrawal.method.replace('_', ' ').toUpperCase()} (Completed)` }).eq('user_id', withdrawal.user_id).eq('reference', withdrawal.id.toUpperCase());
+    if (transactionError) return res.status(500).json({ error: transactionError.message });
+    await supabase.from('notifications').insert({ id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: withdrawal.user_id, title: 'Withdrawal Completed', message: `Your withdrawal of NPR ${Number(withdrawal.amount).toLocaleString('en-IN')} has been sent to your ${withdrawal.method.replace('_', ' ')} account.`, type: 'withdrawal', read: false });
+    return res.json({ message: 'Withdrawal approved and completed.', withdrawal: mapSupabaseWithdrawal(updatedWithdrawal), wallet: mapSupabaseWallet(updatedWallet, withdrawal.user_id) });
+  }
 
   const db = readDb();
   const withdrawal = db.withdrawals.find((w: any) => w.id === id);
@@ -2754,9 +3012,37 @@ app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, async (req, res)
 });
 
 // Admin Reject Withdrawal (Refund)
-app.post('/api/admin/withdrawals/:id/reject', adminMiddleware, (req, res) => {
+app.post('/api/admin/withdrawals/:id/reject', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { reason } = req.body;
+
+  if (supabase) {
+    const { data: withdrawal, error: lookupError } = await supabase.from('withdrawals').select('*').eq('id', id).maybeSingle();
+    if (lookupError) return res.status(500).json({ error: lookupError.message });
+    if (!withdrawal) return res.status(404).json({ error: 'Withdrawal request not found.' });
+    if (withdrawal.status === 'rejected') return res.status(400).json({ error: 'Withdrawal is already rejected.' });
+    const { data: updatedWithdrawal, error: updateError } = await supabase.from('withdrawals').update({ status: 'rejected', admin_note: reason || 'Account details invalid.' }).eq('id', id).select('*').single();
+    if (updateError) return res.status(500).json({ error: updateError.message });
+    const { data: currentWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', withdrawal.user_id).maybeSingle();
+    if (walletError) return res.status(500).json({ error: walletError.message });
+    const { data: updatedWallet, error: walletUpdateError } = await supabase.from('wallets').upsert({
+      user_id: withdrawal.user_id,
+      available_balance: Number(currentWallet?.available_balance || 0) + Number(withdrawal.amount),
+      invested_balance: Number(currentWallet?.invested_balance || 0),
+      total_earnings: Number(currentWallet?.total_earnings || 0),
+      referral_earnings: Number(currentWallet?.referral_earnings || 0),
+      total_deposited: Number(currentWallet?.total_deposited || 0),
+      total_withdrawn: Number(currentWallet?.total_withdrawn || 0),
+      pending_withdrawals: Math.max(0, Number(currentWallet?.pending_withdrawals || 0) - Number(withdrawal.amount)),
+      pending_deposits: Number(currentWallet?.pending_deposits || 0),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id' }).select('*').single();
+    if (walletUpdateError) return res.status(500).json({ error: walletUpdateError.message });
+    const { error: transactionError } = await supabase.from('transactions').update({ status: 'rejected', description: `Withdrawal request rejected and refunded: ${reason || 'Details mismatched'}` }).eq('user_id', withdrawal.user_id).eq('reference', withdrawal.id.toUpperCase());
+    if (transactionError) return res.status(500).json({ error: transactionError.message });
+    await supabase.from('notifications').insert({ id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: withdrawal.user_id, title: 'Withdrawal Rejected & Refunded', message: `Your withdrawal request of NPR ${Number(withdrawal.amount).toLocaleString('en-IN')} was rejected and refunded. Reason: ${reason || 'Invalid account details'}.`, type: 'withdrawal', read: false });
+    return res.json({ message: 'Withdrawal rejected and refunded to user.', withdrawal: mapSupabaseWithdrawal(updatedWithdrawal), wallet: mapSupabaseWallet(updatedWallet, withdrawal.user_id) });
+  }
 
   const db = readDb();
   const withdrawal = db.withdrawals.find((w: any) => w.id === id);
