@@ -1310,7 +1310,31 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
     return res.status(400).json({ error: 'Wallet not found.' });
   }
 
-  const wallet = db.wallets[walletIndex];
+  let wallet = db.wallets[walletIndex];
+  let persistenceUserId = user.id;
+  if (supabase) {
+    const { data: liveProfile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (liveProfile) {
+      persistenceUserId = liveProfile.id;
+      const { data: liveWallet, error: liveWalletError } = await supabase.from('wallets').select('*').eq('user_id', liveProfile.id).maybeSingle();
+      if (liveWalletError) return res.status(500).json({ error: liveWalletError.message });
+      if (liveWallet) {
+        wallet = {
+          ...wallet,
+          availableBalance: Number(liveWallet.available_balance || 0),
+          investedBalance: Number(liveWallet.invested_balance || 0),
+          totalEarnings: Number(liveWallet.total_earnings || 0),
+          referralEarnings: Number(liveWallet.referral_earnings || 0),
+          totalDeposited: Number(liveWallet.total_deposited || 0),
+          totalWithdrawn: Number(liveWallet.total_withdrawn || 0),
+          pendingWithdrawals: Number(liveWallet.pending_withdrawals || 0),
+          pendingDeposits: Number(liveWallet.pending_deposits || 0),
+          updatedAt: liveWallet.updated_at,
+        };
+        db.wallets[walletIndex] = wallet;
+      }
+    }
+  }
   if (wallet.availableBalance < invAmount) {
     return res.status(400).json({
       error: `Insufficient available balance (NPR ${wallet.availableBalance.toLocaleString('en-IN')}). Please deposit funds first.`,
@@ -1389,6 +1413,53 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
   db.investments.unshift(newInvestment);
   db.transactions.unshift(newTx);
   db.notifications.unshift(newNotif);
+
+  if (supabase) {
+    const { error: walletPersistenceError } = await supabase.from('wallets').upsert({
+      user_id: persistenceUserId,
+      available_balance: wallet.availableBalance,
+      invested_balance: wallet.investedBalance,
+      total_earnings: wallet.totalEarnings || 0,
+      referral_earnings: wallet.referralEarnings || 0,
+      total_deposited: wallet.totalDeposited || 0,
+      total_withdrawn: wallet.totalWithdrawn || 0,
+      pending_withdrawals: wallet.pendingWithdrawals || 0,
+      pending_deposits: wallet.pendingDeposits || 0,
+      updated_at: wallet.updatedAt,
+    }, { onConflict: 'user_id' });
+    if (walletPersistenceError) return res.status(500).json({ error: `Investment wallet update failed: ${walletPersistenceError.message}` });
+
+    const { error: investmentPersistenceError } = await supabase.from('investments').upsert({
+      id: investmentId,
+      user_id: persistenceUserId,
+      plan_id: plan.id,
+      plan_name: plan.name,
+      amount: invAmount,
+      return_rate: plan.returnRate,
+      expected_return: expectedTotalReturn,
+      daily_return_amount: Number(dailyReturn.toFixed(2)),
+      end_date: endDate.toISOString(),
+      next_payout_date: nextPayout.toISOString(),
+      duration_days: plan.durationDays,
+      days_remaining: plan.durationDays,
+      progress_percentage: 0,
+      status: 'active',
+      created_at: startDate.toISOString(),
+    }, { onConflict: 'id' });
+    if (investmentPersistenceError) return res.status(500).json({ error: `Investment save failed: ${investmentPersistenceError.message}` });
+    const { error: transactionPersistenceError } = await supabase.from('transactions').upsert({
+      id: txId,
+      user_id: persistenceUserId,
+      type: 'investment',
+      direction: 'out',
+      amount: invAmount,
+      reference: investmentId.toUpperCase(),
+      description: newTx.description,
+      status: 'completed',
+      created_at: startDate.toISOString(),
+    }, { onConflict: 'id' });
+    if (transactionPersistenceError) return res.status(500).json({ error: `Investment transaction save failed: ${transactionPersistenceError.message}` });
+  }
 
   // If user was referred, check if referrer gets referral commission on first investment
   if (user.referredBy) {
@@ -2283,6 +2354,7 @@ app.get('/api/admin/referrals', adminMiddleware, async (_req, res) => {
 app.put('/api/admin/users/:id/balance', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { action, amount, reason } = req.body; // action: 'add' | 'deduct' | 'set'
+  const db = readDb();
 
   const adjAmount = Number(amount);
   if (isNaN(adjAmount)) {
@@ -2320,6 +2392,11 @@ app.put('/api/admin/users/:id/balance', adminMiddleware, async (req, res) => {
       if (updateError) return res.status(500).json({ error: updateError.message });
 
       const difference = availableBalance - previousBalance;
+      const cachedWallet = db.wallets.find((candidate: any) => candidate.userId === id);
+      if (cachedWallet) {
+        cachedWallet.availableBalance = availableBalance;
+        cachedWallet.updatedAt = now;
+      }
       await supabase.from('transactions').insert({
         id: `tx_${crypto.randomBytes(6).toString('hex')}`,
         user_id: id,
@@ -2344,7 +2421,6 @@ app.put('/api/admin/users/:id/balance', adminMiddleware, async (req, res) => {
     }
   }
 
-  const db = readDb();
   const user = db.users.find((u: any) => u.id === id);
   if (!user) return res.status(404).json({ error: 'User not found.' });
 
