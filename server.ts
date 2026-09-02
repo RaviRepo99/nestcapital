@@ -1398,6 +1398,11 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
     if (referrer) {
       const commissionRate = 0.05;
       const commissionAmount = invAmount * commissionRate;
+      const refRec = db.referrals.find((r: any) => r.referrerId === referrer.id && r.referredUserId === user.id);
+      if (refRec?.investmentCommissionRewarded) {
+        writeDb(db);
+        return res.status(201).json({ message: 'Investment activated successfully!', investment: newInvestment, wallet });
+      }
 
       const refWalletIndex = db.wallets.findIndex((w: any) => w.userId === referrer.id);
       if (refWalletIndex !== -1) {
@@ -1436,11 +1441,11 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
         });
 
         // Update referral record
-        const refRec = db.referrals.find((r: any) => r.referrerId === referrer.id && r.referredUserId === user.id);
-        if (refRec) {
+          if (refRec && !refRec.investmentCommissionRewarded) {
           refRec.status = 'active';
           refRec.totalInvestedByReferred = (refRec.totalInvestedByReferred || 0) + invAmount;
           refRec.bonusEarned = (refRec.bonusEarned || 0) + commissionAmount;
+            refRec.investmentCommissionRewarded = true;
         }
       }
     }

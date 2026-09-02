@@ -124,6 +124,7 @@ create table if not exists public.referrals (
   referral_code text not null default '',
   referrer_reward numeric not null default 100 check (referrer_reward = 100),
   referred_reward numeric not null default 50 check (referred_reward = 50),
+  investment_commission_rewarded boolean not null default false,
   total_invested_by_referred numeric not null default 0,
   bonus_earned numeric not null default 0,
   status text not null default 'pending' check (status in ('pending', 'successful')),
@@ -135,6 +136,7 @@ create table if not exists public.referrals (
 alter table public.referrals add column if not exists referral_code text not null default '';
 alter table public.referrals add column if not exists referrer_reward numeric not null default 100;
 alter table public.referrals add column if not exists referred_reward numeric not null default 50;
+alter table public.referrals add column if not exists investment_commission_rewarded boolean not null default false;
 alter table public.referrals add column if not exists rewarded_at timestamptz;
 update public.referrals set referrer_reward = 100, referred_reward = 50, status = case when status = 'active' then 'successful' else status end where referrer_reward is null or referred_reward is null or status = 'active';
 alter table public.referrals drop constraint if exists referrals_status_check;
@@ -288,6 +290,9 @@ begin
   if not found then return jsonb_build_object('commission_paid', false, 'reason', 'invalid_referrer'); end if;
   select * into referral_row from public.referrals where referred_user_id = p_referred_user_id for update;
   if not found or referral_row.referrer_id <> referrer.id then return jsonb_build_object('commission_paid', false, 'reason', 'referral_not_found'); end if;
+  if referral_row.investment_commission_rewarded then
+    return jsonb_build_object('commission_paid', false, 'reason', 'first_investment_already_rewarded');
+  end if;
 
   commission := round(p_investment_amount * 0.05, 2);
   if exists (select 1 from public.transactions where user_id = referrer.id and reference = 'REF-INVEST-' || upper(p_investment_id)) then
@@ -295,7 +300,7 @@ begin
   end if;
   insert into public.wallets (user_id) values (referrer.id) on conflict (user_id) do nothing;
   update public.wallets set referral_earnings = referral_earnings + commission, updated_at = now() where user_id = referrer.id;
-  update public.referrals set total_invested_by_referred = total_invested_by_referred + p_investment_amount, bonus_earned = bonus_earned + commission where id = referral_row.id;
+  update public.referrals set total_invested_by_referred = total_invested_by_referred + p_investment_amount, bonus_earned = bonus_earned + commission, investment_commission_rewarded = true where id = referral_row.id;
   insert into public.transactions (id, user_id, type, direction, amount, reference, description, status)
   values ('tx_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'referral_bonus', 'in', commission, 'REF-INVEST-' || upper(p_investment_id), '5% referral commission from ' || referred_user.full_name || '''s investment', 'completed');
   insert into public.notifications (id, user_id, title, message, type, read)
