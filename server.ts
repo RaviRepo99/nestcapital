@@ -33,6 +33,11 @@ const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_K
 const supabaseAuth = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
   : null;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const MAIL_FROM = process.env.MAIL_FROM || 'CapitalNest Nepal <notifications@capitalnest.np>';
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
 const PENDING_REGISTRATIONS = new Map<string, {
   fullName: string;
   phone: string;
@@ -402,6 +407,75 @@ function mapSupabaseWallet(wallet: any, userId: string) {
     pendingDeposits: Number(wallet?.pending_deposits || 0),
     updatedAt: wallet?.updated_at || new Date().toISOString(),
   };
+}
+
+async function notifyUser(userId: string, title: string, message: string, type: string, email?: string, subject = title) {
+  if (supabase) {
+    await supabase.from('notifications').insert({
+      id: `notif_${crypto.randomBytes(6).toString('hex')}`,
+      user_id: userId,
+      title,
+      message,
+      type,
+      read: false,
+    });
+  }
+
+  if (RESEND_API_KEY && email) {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: MAIL_FROM, to: [email], subject, text: message }),
+    });
+  }
+
+  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER) {
+    const { data: profile } = await supabase?.from('profiles').select('phone').eq('id', userId).maybeSingle() || { data: null };
+    const phone = String(profile?.phone || '').replace(/^0/, '+977');
+    if (phone) {
+      const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ From: TWILIO_FROM_NUMBER, To: phone, Body: message.slice(0, 1500) }),
+      });
+    }
+  }
+}
+
+async function sendBulkAnnouncement(title: string, message: string) {
+  if (!supabase) return 0;
+  const { data: profiles, error } = await supabase.from('profiles').select('id, email, phone');
+  if (error || !profiles?.length) return 0;
+  const rows = profiles.map((profile: any) => ({
+    id: `notif_${crypto.randomBytes(6).toString('hex')}`,
+    user_id: profile.id,
+    title,
+    message,
+    type: 'system',
+    read: false,
+  }));
+  await supabase.from('notifications').insert(rows);
+
+  if (RESEND_API_KEY) {
+    await Promise.all(profiles.filter((profile: any) => profile.email).map((profile: any) => fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: MAIL_FROM, to: [profile.email], subject: title, text: message }),
+    })));
+  }
+  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER) {
+    const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
+    await Promise.all(profiles.filter((profile: any) => profile.phone).map((profile: any) => {
+      const phone = String(profile.phone).replace(/^0/, '+977');
+      return fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
+        method: 'POST',
+        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ From: TWILIO_FROM_NUMBER, To: phone, Body: message.slice(0, 1500) }),
+      });
+    }));
+  }
+  return profiles.length;
 }
 
 function getKycImages(profile: any) {
@@ -2266,7 +2340,7 @@ app.get('/api/admin/deposits', adminMiddleware, (req, res) => {
 });
 
 // Admin Approve Deposit
-app.post('/api/admin/deposits/:id/approve', adminMiddleware, (req, res) => {
+app.post('/api/admin/deposits/:id/approve', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { note } = req.body;
 
@@ -2322,6 +2396,13 @@ app.post('/api/admin/deposits/:id/approve', adminMiddleware, (req, res) => {
   });
 
   writeDb(db);
+  await notifyUser(
+    deposit.userId,
+    'Deposit Approved',
+    `Your deposit of NPR ${deposit.amount.toLocaleString('en-IN')} has been verified and added to your available balance.`,
+    'deposit',
+    deposit.userEmail,
+  );
   res.json({ message: 'Deposit approved and wallet credited successfully.', deposit, wallet });
 });
 
@@ -2369,7 +2450,7 @@ app.get('/api/admin/withdrawals', adminMiddleware, (req, res) => {
 });
 
 // Admin Approve Withdrawal (Payout)
-app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, (req, res) => {
+app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { note } = req.body;
 
@@ -2409,6 +2490,13 @@ app.post('/api/admin/withdrawals/:id/approve', adminMiddleware, (req, res) => {
   });
 
   writeDb(db);
+  await notifyUser(
+    withdrawal.userId,
+    'Withdrawal Completed',
+    `Your withdrawal of NPR ${withdrawal.amount.toLocaleString('en-IN')} has been sent to your ${withdrawal.method.replace('_', ' ')} account.`,
+    'withdrawal',
+    withdrawal.userEmail,
+  );
   res.json({ message: 'Withdrawal approved and completed.', withdrawal, wallet });
 });
 
@@ -2691,11 +2779,16 @@ app.post('/api/admin/tickets/:id/reply', adminMiddleware, (req, res) => {
 });
 
 // Admin Broadcast Notification
-app.post('/api/admin/broadcast-notification', adminMiddleware, (req, res) => {
+app.post('/api/admin/broadcast-notification', adminMiddleware, async (req, res) => {
   const { title, message, type } = req.body;
 
   if (!title || !message) {
     return res.status(400).json({ error: 'Title and message are required.' });
+  }
+
+  if (supabase) {
+    const recipientCount = await sendBulkAnnouncement(title.trim(), message.trim());
+    return res.json({ message: `Announcement sent to ${recipientCount} users.` });
   }
 
   const db = readDb();
