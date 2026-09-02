@@ -996,20 +996,15 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   if (!user) {
-    return res.status(401).json({ error: 'Invalid email or password.' });
+    if (!supabaseAuth) return res.status(401).json({ error: 'Invalid email or password.' });
   }
 
-  if (user.isBlocked) {
+  if (user?.isBlocked) {
     return res.status(403).json({ error: 'Your account is suspended. Contact support.' });
   }
 
-  if (supabaseAuth && user.emailVerified === false) {
+  if (supabaseAuth && user?.emailVerified === false) {
     return res.status(403).json({ error: 'Please verify your email before signing in.' });
-  }
-
-  const inputHash = hashPassword(password);
-  if (user.passwordHash !== inputHash) {
-    return res.status(401).json({ error: 'Invalid email or password.' });
   }
 
   if (supabaseAuth) {
@@ -1020,7 +1015,31 @@ app.post('/api/auth/login', async (req, res) => {
     if (authError && /not confirmed|email.*confirm/i.test(authError.message)) {
       return res.status(403).json({ error: 'Please verify your email before signing in.' });
     }
+    if (authError) return res.status(401).json({ error: 'Invalid email or password.' });
+  } else if (!user || user.passwordHash !== hashPassword(password)) {
+    return res.status(401).json({ error: 'Invalid email or password.' });
   }
+
+  if (!user && supabase) {
+    const { data: profile } = await supabase.from('profiles').select('*').eq('email', normalizedEmail).maybeSingle();
+    if (profile) {
+      user = {
+        id: profile.id,
+        email: profile.email,
+        fullName: profile.full_name,
+        phone: profile.phone || '',
+        role: profile.role,
+        referralCode: profile.referral_code,
+        referredBy: profile.referred_by || undefined,
+        kycStatus: profile.kyc_status,
+        emailVerified: true,
+        isBlocked: profile.is_blocked,
+        createdAt: profile.created_at,
+      };
+      db.users.push(user);
+    }
+  }
+  if (!user) return res.status(404).json({ error: 'Account profile not found.' });
 
   const token = generateToken(user);
   let wallet = db.wallets.find((w: any) => w.userId === user.id);
@@ -2086,6 +2105,10 @@ app.put('/api/admin/users/:id/credentials', adminMiddleware, async (req, res) =>
     ...(nextPassword ? { password: nextPassword } : {}),
   });
   if (updateError) return res.status(400).json({ error: updateError.message });
+
+  if (nextPassword && user) {
+    user.passwordHash = hashPassword(nextPassword);
+  }
 
   if (nextEmail) {
     resolvedUser.email = nextEmail;
