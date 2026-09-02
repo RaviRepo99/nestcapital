@@ -1104,6 +1104,14 @@ app.post('/api/auth/login', async (req, res) => {
 
   const token = generateToken(user);
   let wallet = db.wallets.find((w: any) => w.userId === user.id);
+  if (supabase) {
+    const { data: profile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profile) {
+      const { data: liveWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
+      if (walletError) return res.status(500).json({ error: walletError.message });
+      wallet = mapSupabaseWallet(liveWallet, profile.id);
+    }
+  }
   if (!wallet) {
     wallet = {
       userId: user.id,
@@ -1390,36 +1398,18 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
     }
   }
 
-  const walletIndex = db.wallets.findIndex((w: any) => w.userId === user.id);
-  if (walletIndex === -1) {
-    return res.status(400).json({ error: 'Wallet not found.' });
-  }
-
-  let wallet = db.wallets[walletIndex];
+  let walletIndex = db.wallets.findIndex((w: any) => w.userId === user.id);
+  let wallet = walletIndex === -1 ? null : db.wallets[walletIndex];
   let persistenceUserId = user.id;
   if (supabase) {
     const { data: liveProfile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
-    if (liveProfile) {
-      persistenceUserId = liveProfile.id;
-      const { data: liveWallet, error: liveWalletError } = await supabase.from('wallets').select('*').eq('user_id', liveProfile.id).maybeSingle();
-      if (liveWalletError) return res.status(500).json({ error: liveWalletError.message });
-      if (liveWallet) {
-        wallet = {
-          ...wallet,
-          availableBalance: Number(liveWallet.available_balance || 0),
-          investedBalance: Number(liveWallet.invested_balance || 0),
-          totalEarnings: Number(liveWallet.total_earnings || 0),
-          referralEarnings: Number(liveWallet.referral_earnings || 0),
-          totalDeposited: Number(liveWallet.total_deposited || 0),
-          totalWithdrawn: Number(liveWallet.total_withdrawn || 0),
-          pendingWithdrawals: Number(liveWallet.pending_withdrawals || 0),
-          pendingDeposits: Number(liveWallet.pending_deposits || 0),
-          updatedAt: liveWallet.updated_at,
-        };
-        db.wallets[walletIndex] = wallet;
-      }
-    }
+    if (!liveProfile) return res.status(404).json({ error: 'User profile not found.' });
+    persistenceUserId = liveProfile.id;
+    const { data: liveWallet, error: liveWalletError } = await supabase.from('wallets').select('*').eq('user_id', liveProfile.id).maybeSingle();
+    if (liveWalletError) return res.status(500).json({ error: liveWalletError.message });
+    wallet = mapSupabaseWallet(liveWallet, liveProfile.id);
   }
+  if (!wallet) return res.status(400).json({ error: 'Wallet not found.' });
   if (wallet.availableBalance < invAmount) {
     return res.status(400).json({
       error: `Insufficient available balance (NPR ${wallet.availableBalance.toLocaleString('en-IN')}). Please deposit funds first.`,
