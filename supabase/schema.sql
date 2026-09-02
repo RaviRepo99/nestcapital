@@ -261,7 +261,7 @@ begin
 end;
 $$;
 revoke all on function public.process_referral_reward(uuid) from public;
-grant execute on function public.process_referral_reward(uuid) to authenticated, service_role;
+grant execute on function public.process_referral_reward(uuid) to service_role;
 
 create or replace function public.process_referral_investment_commission(p_referred_user_id uuid, p_investment_id text, p_investment_amount numeric)
 returns jsonb
@@ -301,7 +301,7 @@ begin
 end;
 $$;
 revoke all on function public.process_referral_investment_commission(uuid, text, numeric) from public;
-grant execute on function public.process_referral_investment_commission(uuid, text, numeric) to authenticated, service_role;
+grant execute on function public.process_referral_investment_commission(uuid, text, numeric) to service_role;
 
 alter table public.profiles enable row level security;
 alter table public.wallets enable row level security;

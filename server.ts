@@ -922,7 +922,10 @@ app.post('/api/auth/session', async (req, res) => {
       read: false,
       createdAt: new Date().toISOString(),
     });
-    referralRewardResult = await applySupabaseSignupReferral(newUser.id, newUser.fullName, newUser.email, newUser.referredBy);
+    if (!referralRewardResult) {
+      referralRewardResult = await applySupabaseSignupReferral(newUser.id, newUser.fullName, newUser.email, newUser.referredBy);
+    }
+    if (referralRewardResult?.rewarded === true) newWallet.availableBalance = 50;
     writeDb(db);
     PENDING_REGISTRATIONS.delete(email);
     const token = generateToken(newUser);
