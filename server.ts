@@ -493,6 +493,35 @@ function getKycImages(profile: any) {
   }
 }
 
+async function ensureSupabasePlanExists(plan: any) {
+  if (!supabase) return null;
+
+  const { data: existingPlan, error: lookupError } = await supabase
+    .from('investment_plans')
+    .select('id')
+    .eq('id', plan.id)
+    .maybeSingle();
+  if (lookupError) return lookupError;
+  if (existingPlan) return null;
+
+  const { error: insertError } = await supabase.from('investment_plans').insert({
+    id: plan.id,
+    name: plan.name,
+    minimum_amount: plan.minimumAmount,
+    maximum_amount: plan.maximumAmount ?? null,
+    return_rate: plan.returnRate,
+    duration_days: plan.durationDays,
+    payout_frequency: plan.payoutFrequency || 'completion',
+    status: plan.status || 'active',
+    badge: plan.badge || null,
+    description: plan.description || '',
+    is_popular: Boolean(plan.isPopular),
+    total_investors: plan.totalInvestors || 0,
+    total_invested_npr: plan.totalInvestedNPR || 0,
+  });
+  return insertError;
+}
+
 async function hydrateDbFromSupabase() {
   if (!supabase) {
     liveDb = getInitialDb();
@@ -1320,6 +1349,13 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
     return res.status(400).json({
       error: `Maximum investment for ${plan.name} is NPR ${plan.maximumAmount.toLocaleString('en-IN')}.`,
     });
+  }
+
+  if (supabase) {
+    const planError = await ensureSupabasePlanExists(plan);
+    if (planError) {
+      return res.status(503).json({ error: `Investment plan is not ready. Please try again shortly: ${planError.message}` });
+    }
   }
 
   const walletIndex = db.wallets.findIndex((w: any) => w.userId === user.id);

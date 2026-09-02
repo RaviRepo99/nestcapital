@@ -56,6 +56,16 @@ create table if not exists public.investment_plans (
   total_invested_npr numeric not null default 0
 );
 
+insert into public.investment_plans (id, name, minimum_amount, maximum_amount, return_rate, duration_days, payout_frequency, status, badge, description, is_popular, total_investors, total_invested_npr)
+values
+  ('starter', 'Starter Plan', 5000, 14999, 5, 7, 'completion', 'active', 'Fast Return', 'Perfect for first-time investors looking for a 7-day package return.', false, 1420, 12500000),
+  ('growth', 'Growth Plan', 15000, 24999, 20, 30, 'completion', 'active', 'Popular Choice', 'Balanced 30-day package with the configured return paid at maturity.', true, 3840, 68400000),
+  ('premium', 'Premium Plan', 25000, 34999, 30, 45, 'completion', 'active', 'High Yield', 'Accelerated 45-day package with the configured return paid at maturity.', false, 2190, 74200000),
+  ('elite', 'Elite Plan', 35000, 49999, 40, 60, 'completion', 'active', 'Executive', 'Dedicated 60-day package with the configured return paid at maturity.', false, 1650, 82000000),
+  ('diamond', 'Diamond Plan', 50000, 94999, 60, 75, 'completion', 'active', 'VIP Wealth', 'Premier 75-day package with the configured return paid at maturity.', false, 980, 64500000),
+  ('platinum', 'Platinum Plan', 95000, 1000000, 80, 90, 'completion', 'active', 'Maximum Return', 'Highest tier 90-day package with the configured return paid at maturity.', false, 620, 95000000)
+on conflict (id) do nothing;
+
 update public.investment_plans set payout_frequency = 'completion' where payout_frequency = 'daily';
 
 create table if not exists public.investments (
