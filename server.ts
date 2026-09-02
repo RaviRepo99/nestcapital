@@ -2675,6 +2675,10 @@ app.post('/api/admin/investments/:id/payout', adminMiddleware, (req, res) => {
     return res.status(400).json({ error: 'Investment is not active.' });
   }
 
+  if (new Date(investment.endDate).getTime() > Date.now()) {
+    return res.status(400).json({ error: `This package pays after its ${investment.durationDays}-day term ends.` });
+  }
+
   const expectedProfit = Math.max(0, (investment.expectedReturn || investment.amount) - investment.amount);
   const remainingProfit = Math.max(0, expectedProfit - (investment.profitEarnedSoFar || 0));
   if (remainingProfit <= 0) {

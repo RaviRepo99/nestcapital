@@ -113,7 +113,7 @@ export const InvestModal: React.FC = () => {
               {selectedPlan.durationDays} Days Term
             </span>
             <span className="bg-slate-800 text-slate-300 font-medium text-xs px-2.5 py-0.5 rounded-md">
-              Daily Yield Payout
+              Paid at Maturity
             </span>
           </div>
         </div>
@@ -127,7 +127,7 @@ export const InvestModal: React.FC = () => {
               </div>
               <h4 className="text-xl font-bold font-display text-slate-900">Investment Activated!</h4>
               <p className="text-xs text-slate-600 max-w-sm mx-auto">
-                Your investment of <strong className="text-slate-900">{formatNPR(amount)}</strong> has been confirmed. Daily profits will automatically credit to your wallet.
+                Your investment of <strong className="text-slate-900">{formatNPR(amount)}</strong> has been confirmed. Principal and the configured percentage profit will be credited after the {selectedPlan.durationDays}-day term.
               </p>
               <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
                 <button
@@ -233,9 +233,9 @@ export const InvestModal: React.FC = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[11px] block">Daily Credited Yield</span>
+                    <span className="text-slate-400 text-[11px] block">Profit at Maturity</span>
                     <span className="text-xs font-semibold text-emerald-400 font-display">
-                      +{formatNPR(dailyYield)}/day
+                      +{formatNPR(totalProfit)}
                     </span>
                   </div>
                   <div>

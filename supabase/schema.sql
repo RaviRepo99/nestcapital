@@ -56,6 +56,8 @@ create table if not exists public.investment_plans (
   total_invested_npr numeric not null default 0
 );
 
+update public.investment_plans set payout_frequency = 'completion' where payout_frequency = 'daily';
+
 create table if not exists public.investments (
   id text primary key,
   user_id uuid not null references public.profiles(id) on delete cascade,
