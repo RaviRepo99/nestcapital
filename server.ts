@@ -35,9 +35,6 @@ const supabaseAuth = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
   : null;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const MAIL_FROM = process.env.MAIL_FROM || 'CapitalNest Nepal <notifications@capitalnest.np>';
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM_NUMBER = process.env.TWILIO_FROM_NUMBER;
 const PENDING_REGISTRATIONS = new Map<string, {
   fullName: string;
   phone: string;
@@ -429,18 +426,6 @@ async function notifyUser(userId: string, title: string, message: string, type: 
     });
   }
 
-  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER) {
-    const { data: profile } = await supabase?.from('profiles').select('phone').eq('id', userId).maybeSingle() || { data: null };
-    const phone = String(profile?.phone || '').replace(/^0/, '+977');
-    if (phone) {
-      const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
-      await fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
-        method: 'POST',
-        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ From: TWILIO_FROM_NUMBER, To: phone, Body: message.slice(0, 1500) }),
-      });
-    }
-  }
 }
 
 async function sendBulkAnnouncement(title: string, message: string) {
@@ -463,17 +448,6 @@ async function sendBulkAnnouncement(title: string, message: string) {
       headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: MAIL_FROM, to: [profile.email], subject: title, text: message }),
     })));
-  }
-  if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_FROM_NUMBER) {
-    const auth = Buffer.from(`${TWILIO_ACCOUNT_SID}:${TWILIO_AUTH_TOKEN}`).toString('base64');
-    await Promise.all(profiles.filter((profile: any) => profile.phone).map((profile: any) => {
-      const phone = String(profile.phone).replace(/^0/, '+977');
-      return fetch(`https://api.twilio.com/2010-04-01/Accounts/${TWILIO_ACCOUNT_SID}/Messages.json`, {
-        method: 'POST',
-        headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ From: TWILIO_FROM_NUMBER, To: phone, Body: message.slice(0, 1500) }),
-      });
-    }));
   }
   return profiles.length;
 }
