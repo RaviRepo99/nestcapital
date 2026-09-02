@@ -1,6 +1,5 @@
 import express, { Request, Response } from 'express';
 import 'dotenv/config';
-import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
@@ -17,9 +16,17 @@ const PORT = 3000;
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+let dbReady: Promise<void> = Promise.resolve();
+app.use(async (_req, _res, next) => {
+  try {
+    await dbReady;
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Database directory & path
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
 const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : null;
@@ -35,10 +42,6 @@ const PENDING_REGISTRATIONS = new Map<string, {
   registrationDeviceId?: string;
 }>();
 let liveDb: any | null = null;
-
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
 
 // Password hashing helper
 function hashPassword(password: string): string {
@@ -371,42 +374,22 @@ function getInitialDb() {
 
 // Database helper
 function readDb() {
-  if (liveDb) return liveDb;
-  try {
-    if (!fs.existsSync(DB_FILE)) {
-      const initialData = getInitialDb();
-      fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
-      liveDb = initialData;
-      return liveDb;
-    }
-    const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    liveDb = JSON.parse(raw);
-    return liveDb;
-  } catch (err) {
-    console.error('Error reading DB, reinitializing:', err);
-    const initialData = getInitialDb();
-    if (!process.env.VERCEL) {
-      fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
-    }
-    liveDb = initialData;
-    return liveDb;
-  }
+  if (!liveDb) liveDb = getInitialDb();
+  return liveDb;
 }
 
 function writeDb(data: any) {
-  try {
-    liveDb = data;
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
-    if (supabase) {
-      void supabase.from('app_state').upsert({ id: 'capitalnest', data, updated_at: new Date().toISOString() });
-    }
-  } catch (err) {
-    console.error('Error writing DB:', err);
+  liveDb = data;
+  if (supabase) {
+    void supabase.from('app_state').upsert({ id: 'capitalnest', data, updated_at: new Date().toISOString() }).then(({ error }) => {
+      if (error) console.error(`Error writing Supabase app state: ${error.message}`);
+    });
   }
 }
 
 async function hydrateDbFromSupabase() {
   if (!supabase) {
+    liveDb = getInitialDb();
     console.warn('Supabase persistence is disabled: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.');
     return;
   }
@@ -419,14 +402,11 @@ async function hydrateDbFromSupabase() {
 
   if (data?.data) {
     liveDb = data.data;
-    if (!process.env.VERCEL) {
-      fs.writeFileSync(DB_FILE, JSON.stringify(liveDb, null, 2), 'utf-8');
-    }
   } else {
-    const localData = readDb();
+    liveDb = getInitialDb();
     const { error: seedError } = await supabase.from('app_state').upsert({
       id: 'capitalnest',
-      data: localData,
+      data: liveDb,
       updated_at: new Date().toISOString(),
     });
     if (seedError) console.warn(`Supabase app state was not seeded: ${seedError.message}`);
@@ -2356,5 +2336,5 @@ export default app;
 if (!process.env.VERCEL) {
   startServer();
 } else {
-  void hydrateDbFromSupabase();
+  dbReady = hydrateDbFromSupabase();
 }
