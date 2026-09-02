@@ -19,7 +19,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 let dbReady: Promise<void> = Promise.resolve();
 app.use(async (_req, _res, next) => {
   try {
-    await dbReady;
+    if (supabase) {
+      await hydrateDbFromSupabase();
+    } else {
+      await dbReady;
+    }
     next();
   } catch (error) {
     next(error);
@@ -554,6 +558,12 @@ async function applySupabaseSignupReferral(referredUserId: string, referredUserN
     { id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: referrer.id, title: 'New Referral Registered!', message: `${referredUserName} registered using your referral code. NPR 100 has been added to your referral earnings.`, type: 'referral', read: false, created_at: now },
     { id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: referredUserId, title: 'Referral Welcome Bonus Added!', message: 'NPR 50 has been added to your available balance for joining through a referral.', type: 'referral', read: false, created_at: now },
   ]);
+}
+
+async function reconcileSupabaseReferrals() {
+  if (!supabase) return;
+  const { data: profiles } = await supabase.from('profiles').select('id, full_name, email, referred_by').not('referred_by', 'is', null);
+  await Promise.all((profiles || []).map((profile: any) => applySupabaseSignupReferral(profile.id, profile.full_name, profile.email, profile.referred_by)));
 }
 
 // Token / Session store in-memory
@@ -1682,6 +1692,7 @@ app.get('/api/referrals', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const db = readDb();
   if (supabase) {
+    await reconcileSupabaseReferrals();
     const [{ data: profile }, { data: referrals }, { data: wallet }, { data: investments }] = await Promise.all([
       supabase.from('profiles').select('id, referral_code').eq('email', user.email).maybeSingle(),
       supabase.from('referrals').select('*').order('created_at', { ascending: false }),
@@ -2049,6 +2060,7 @@ app.get('/api/admin/analytics', adminMiddleware, (req, res) => {
 app.get('/api/admin/users', adminMiddleware, async (req, res) => {
   const db = readDb();
   if (supabase) {
+    await reconcileSupabaseReferrals();
     const [{ data: profiles, error: profilesError }, { data: wallets, error: walletsError }, { data: investments, error: investmentsError }, { data: referrals, error: referralsError }] = await Promise.all([
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('wallets').select('*'),
