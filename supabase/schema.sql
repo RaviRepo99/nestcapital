@@ -173,6 +173,8 @@ create index if not exists deposits_user_id_idx on public.deposits(user_id);
 create index if not exists investments_user_id_idx on public.investments(user_id);
 create index if not exists transactions_user_id_idx on public.transactions(user_id);
 create index if not exists referrals_referrer_id_idx on public.referrals(referrer_id);
+create index if not exists profiles_registration_ip_idx on public.profiles(registration_ip);
+create index if not exists profiles_registration_device_idx on public.profiles(registration_device_id);
 drop index if exists profiles_registration_ip_unique;
 drop index if exists profiles_registration_device_unique;
 

@@ -49,7 +49,9 @@ function hashPassword(password: string): string {
 }
 
 function getClientIp(req: Request): string {
-  return (req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '').trim();
+  const forwardedFor = req.headers['x-forwarded-for'];
+  const forwardedIp = Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor?.split(',')[0];
+  return (forwardedIp || req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '').trim();
 }
 
 function normalizePhone(phone: string): string {
@@ -616,6 +618,24 @@ app.post('/api/auth/register', async (req, res) => {
   const normalizedPhone = normalizePhone(phone);
   if (db.users.some((u: any) => normalizePhone(String(u.phone || '')) === normalizedPhone)) {
     return res.status(400).json({ error: 'An account with this phone number already exists.' });
+  }
+
+  if (registrationDeviceId) {
+    const pendingDuplicate = [...PENDING_REGISTRATIONS.values()].some((pending) => pending.registrationDeviceId === registrationDeviceId);
+    if (pendingDuplicate) return res.status(400).json({ error: 'This device already has a pending registration.' });
+  }
+
+  if (supabase) {
+    const [{ data: emailMatch }, { data: phoneMatch }, { data: ipMatch }, { data: deviceMatch }] = await Promise.all([
+      supabase.from('profiles').select('id').eq('email', normalizedEmail).limit(1).maybeSingle(),
+      supabase.from('profiles').select('id').eq('phone', normalizedPhone).limit(1).maybeSingle(),
+      registrationIp ? supabase.from('profiles').select('id').eq('registration_ip', registrationIp).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+      registrationDeviceId ? supabase.from('profiles').select('id').eq('registration_device_id', registrationDeviceId).limit(1).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    if (emailMatch) return res.status(400).json({ error: 'An account with this email already exists.' });
+    if (phoneMatch) return res.status(400).json({ error: 'An account with this phone number already exists.' });
+    if (ipMatch) return res.status(400).json({ error: 'Only one account can be registered from this IP address.' });
+    if (deviceMatch) return res.status(400).json({ error: 'Only one account can be registered from this device.' });
   }
 
   if (supabaseAuth) {
