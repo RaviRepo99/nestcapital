@@ -104,8 +104,8 @@ export const DepositModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="w-full max-w-lg rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-hidden text-slate-900 animate-in fade-in zoom-in-95 my-8">
+    <div className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-slate-950/70 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+      <div className="w-full max-w-lg max-h-[calc(100dvh-1rem)] sm:max-h-[calc(100dvh-3rem)] rounded-2xl sm:rounded-3xl bg-white shadow-2xl border border-slate-100 overflow-y-auto text-slate-900 animate-in fade-in zoom-in-95 my-0 sm:my-6">
         {/* Header */}
         <div className="bg-gradient-to-r from-[#0B192C] via-[#0F284E] to-[#07111F] text-white p-5 sm:p-6 relative">
           <button
@@ -124,7 +124,7 @@ export const DepositModal: React.FC = () => {
         </div>
 
         {/* Modal Content */}
-        <div className="p-5 sm:p-6">
+        <div className="p-4 sm:p-6">
           {submitted ? (
             <div className="text-center py-6 space-y-4">
               <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto ring-8 ring-amber-50 animate-pulse">
@@ -190,13 +190,13 @@ export const DepositModal: React.FC = () => {
                   />
                 </div>
                 {/* Presets */}
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center gap-2 mt-2">
                   {[5000, 15000, 25000, 50000, 95000].map((val) => (
                     <button
                       key={val}
                       type="button"
                       onClick={() => setAmount(val)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                      className={`px-2 py-1 rounded-lg text-[11px] sm:text-xs font-semibold transition ${
                         amount === val
                           ? 'bg-amber-500 text-slate-950 font-bold'
                           : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -248,14 +248,14 @@ export const DepositModal: React.FC = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <span className="text-slate-400 text-[11px]">Account Name:</span>
-                    <span className="font-semibold text-white">{selectedAccount.accountName}</span>
+                    <span className="font-semibold text-white text-right break-words">{selectedAccount.accountName}</span>
                   </div>
 
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <span className="text-slate-400 text-[11px]">Account Number / ID:</span>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <span className="font-mono font-bold text-amber-300 text-sm">
                         {selectedAccount.accountId}
                       </span>
