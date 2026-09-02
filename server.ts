@@ -587,6 +587,22 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/payment-settings', (req, res) => {
+  if (supabase) {
+    void supabase.from('payment_settings').select('*').order('id').then(({ data, error }) => {
+      if (!error && data) {
+        return res.json(data.map((setting: any) => ({
+          id: setting.id,
+          title: setting.title,
+          accountName: setting.account_name,
+          accountId: setting.account_id,
+          qrImage: setting.qr_image || '',
+        })));
+      }
+      const db = readDb();
+      return res.json(getPaymentSettings(db));
+    });
+    return;
+  }
   const db = readDb();
   const settings = getPaymentSettings(db);
   writeDb(db);
@@ -1771,8 +1787,24 @@ function userReferralsForAdmin(db: any, userId: string): number {
     .reduce((total: number, referral: any) => total + (referral.bonusEarned || 0), 0);
 }
 
-app.put('/api/admin/payment-settings', adminMiddleware, (req, res) => {
+app.put('/api/admin/payment-settings', adminMiddleware, async (req, res) => {
   const updates = Array.isArray(req.body) ? req.body : [];
+  if (supabase) {
+    const rows = updates.map((setting: any) => ({
+      id: setting.id,
+      title: String(setting.title || '').trim(),
+      account_name: String(setting.accountName || '').trim(),
+      account_id: String(setting.accountId || '').trim(),
+      qr_image: typeof setting.qrImage === 'string' ? setting.qrImage : '',
+      updated_at: new Date().toISOString(),
+    })).filter((setting: any) => ['esewa', 'khalti', 'fonepay'].includes(setting.id));
+    const { data, error } = await supabase.from('payment_settings').upsert(rows, { onConflict: 'id' }).select('*').order('id');
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json({
+      message: 'Payment settings updated successfully.',
+      settings: (data || []).map((setting: any) => ({ id: setting.id, title: setting.title, accountName: setting.account_name, accountId: setting.account_id, qrImage: setting.qr_image || '' })),
+    });
+  }
   const db = readDb();
   const currentSettings = getPaymentSettings(db);
 
