@@ -836,7 +836,7 @@ app.post('/api/auth/session', async (req, res) => {
       phone: user?.phone || pending?.phone || metadata.phone || '',
       role: user?.role || 'user',
       referral_code: user?.referralCode || `${String(metadata.full_name || 'USER').replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 12)}${Math.floor(100 + Math.random() * 900)}`,
-      referred_by: user?.referredBy || pending?.referralCode || null,
+      referred_by: user?.referredBy || pending?.referralCode || metadata.referral_code || null,
       registration_ip: user?.registrationIp || pending?.registrationIp || null,
       registration_device_id: user?.registrationDeviceId || pending?.registrationDeviceId || null,
       kyc_status: user?.kycStatus || 'unverified',
@@ -846,6 +846,12 @@ app.post('/api/auth/session', async (req, res) => {
     if (profileError) console.error(`Supabase profile save failed: ${profileError.message}`);
     const { error: walletError } = await supabase.from('wallets').upsert({ user_id: data.user.id }, { onConflict: 'user_id' });
     if (walletError) console.error(`Supabase wallet save failed: ${walletError.message}`);
+    await applySupabaseSignupReferral(
+      data.user.id,
+      profilePayload.full_name,
+      email,
+      profilePayload.referred_by || undefined,
+    );
   }
 
   if (!user && pending) {

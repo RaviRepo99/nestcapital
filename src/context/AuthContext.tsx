@@ -170,7 +170,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { error } = await supabase.auth.signUp({
         email: data.email.trim().toLowerCase(),
         password: data.password,
-        options: { data: { full_name: data.fullName, phone: data.phone } },
+        options: {
+          data: {
+            full_name: data.fullName,
+            phone: data.phone,
+            referral_code: data.referralCode?.trim().toUpperCase() || null,
+          },
+        },
       });
       if (error) throw new Error(`Could not send verification code: ${error.message}`);
       showToast('Registration successful. Check your email for the verification code.', 'info');
