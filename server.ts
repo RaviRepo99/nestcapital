@@ -566,6 +566,14 @@ async function reconcileSupabaseReferrals() {
   await Promise.all((profiles || []).map((profile: any) => applySupabaseSignupReferral(profile.id, profile.full_name, profile.email, profile.referred_by)));
 }
 
+async function reconcileSupabaseReferralForUser(email: string) {
+  if (!supabase) return;
+  const { data: profile } = await supabase.from('profiles').select('id, full_name, email, referred_by').eq('email', email).maybeSingle();
+  if (profile?.referred_by) {
+    await applySupabaseSignupReferral(profile.id, profile.full_name, profile.email, profile.referred_by);
+  }
+}
+
 // Token / Session store in-memory
 const SESSIONS = new Map<string, { userId: string; role: string; email: string }>();
 const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'capitalnest-session-secret';
@@ -1077,6 +1085,7 @@ app.post('/api/auth/login', async (req, res) => {
 // Get Current User (Me)
 app.get('/api/auth/me', authMiddleware, async (req, res) => {
   const user = (req as any).user;
+  await reconcileSupabaseReferralForUser(user.email);
   const db = readDb();
   let wallet = db.wallets.find((w: any) => w.userId === user.id) || {
     userId: user.id,
@@ -1629,6 +1638,7 @@ app.post('/api/withdrawals', authMiddleware, (req, res) => {
 // Get Wallet
 app.get('/api/wallet', authMiddleware, async (req, res) => {
   const user = (req as any).user;
+  await reconcileSupabaseReferralForUser(user.email);
   const db = readDb();
   let wallet = db.wallets.find((w: any) => w.userId === user.id);
 
