@@ -1731,8 +1731,78 @@ app.get('/api/admin/analytics', adminMiddleware, (req, res) => {
 });
 
 // Admin Get All Users
-app.get('/api/admin/users', adminMiddleware, (req, res) => {
+app.get('/api/admin/users', adminMiddleware, async (req, res) => {
   const db = readDb();
+  if (supabase) {
+    const [{ data: profiles, error: profilesError }, { data: wallets, error: walletsError }, { data: investments, error: investmentsError }, { data: referrals, error: referralsError }] = await Promise.all([
+      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+      supabase.from('wallets').select('*'),
+      supabase.from('investments').select('*'),
+      supabase.from('referrals').select('*'),
+    ]);
+
+    if (!profilesError && !walletsError && !investmentsError && !referralsError && profiles) {
+      const profilesById = new Map(profiles.map((profile: any) => [profile.id, profile]));
+      return res.json(profiles.map((profile: any) => {
+        const userWallet = wallets?.find((wallet: any) => wallet.user_id === profile.id);
+        const userInvestments = investments?.filter((investment: any) => investment.user_id === profile.id) || [];
+        const userReferrals = referrals?.filter((referral: any) => referral.referrer_id === profile.id) || [];
+        const referrer = profile.referred_by && (profilesById.get(profile.referred_by) as any);
+        return {
+          id: profile.id,
+          role: profile.role,
+          email: profile.email,
+          phone: profile.phone,
+          avatar: profile.avatar,
+          fullName: profile.full_name,
+          referredBy: profile.referred_by,
+          referralCode: profile.referral_code,
+          kycStatus: profile.kyc_status,
+          kycDocumentType: profile.kyc_document_type,
+          kycDocumentNumber: profile.kyc_document_number,
+          twoFactorEnabled: profile.two_factor_enabled,
+          isBlocked: profile.is_blocked,
+          emailVerified: profile.email_verified,
+          createdAt: profile.created_at,
+          wallet: userWallet ? {
+            userId: userWallet.user_id,
+            availableBalance: Number(userWallet.available_balance),
+            investedBalance: Number(userWallet.invested_balance),
+            totalEarnings: Number(userWallet.total_earnings),
+            referralEarnings: Number(userWallet.referral_earnings),
+            totalDeposited: Number(userWallet.total_deposited),
+            totalWithdrawn: Number(userWallet.total_withdrawn),
+            pendingWithdrawals: Number(userWallet.pending_withdrawals),
+            pendingDeposits: Number(userWallet.pending_deposits),
+            updatedAt: userWallet.updated_at,
+          } : undefined,
+          investmentsCount: userInvestments.length,
+          investments: userInvestments.map((investment: any) => ({
+            id: investment.id,
+            planName: investment.plan_name,
+            amount: Number(investment.amount),
+            expectedReturn: Number(investment.expected_return),
+            profitEarnedSoFar: Number(investment.profit_earned_so_far || 0),
+            status: investment.status,
+          })),
+          referrer: referrer?.email || profile.referred_by || null,
+          referralEarnings: Number(userWallet?.referral_earnings || 0),
+          referralsGiven: userReferrals.map((referral: any) => ({
+            id: referral.id,
+            referredUserName: (profilesById.get(referral.referred_user_id) as any)?.full_name || referral.referred_user_id,
+            referredUserEmail: (profilesById.get(referral.referred_user_id) as any)?.email || '',
+            totalInvestedByReferred: Number(referral.total_invested_by_referred),
+            bonusEarned: Number(referral.bonus_earned),
+            status: referral.status,
+            createdAt: referral.created_at,
+            referrerName: profile.full_name,
+            referrerEmail: profile.email,
+          })),
+        };
+      }));
+    }
+  }
+
   const safeUsers = db.users.map((u: any) => {
     const { passwordHash, ...safe } = u;
     const wallet = db.wallets.find((w: any) => w.userId === u.id);
