@@ -1,4 +1,4 @@
-import app from '../server';
+import app from '../server.ts';
 
 export default function handler(req: any, res: any) {
   const apiPath = typeof req.query?.path === 'string' ? req.query.path : '';
