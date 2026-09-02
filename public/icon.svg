@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B192C"/>
+      <stop offset="50%" stop-color="#0F284E"/>
+      <stop offset="100%" stop-color="#07111F"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE082"/>
+      <stop offset="50%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <linearGradient id="himalayaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#93C5FD" stop-opacity="0.3"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded rectangle -->
+  <rect width="512" height="512" rx="110" fill="url(#bgGrad)"/>
+  
+  <!-- Subtle inner border -->
+  <rect x="12" y="12" width="488" height="488" rx="98" fill="none" stroke="url(#goldGrad)" stroke-width="3" stroke-opacity="0.35"/>
+
+  <!-- Himalayan Mountain Peak Silhouette (Nepal Element) -->
+  <path d="M120 330 L200 220 L240 270 L310 180 L400 330 Z" fill="url(#himalayaGrad)" opacity="0.25"/>
+  <path d="M170 330 L230 240 L270 290 L320 220 L370 330 Z" fill="url(#himalayaGrad)" opacity="0.4"/>
+
+  <!-- Outer Nest Golden Cradle / Growth Shield -->
+  <path d="M130 310 C 130 400, 382 400, 382 310 C 350 350, 162 350, 130 310 Z" fill="url(#goldGrad)"/>
+  
+  <!-- Modern Geometric Capital 'C' & 'N' Golden Growth Nodes -->
+  <!-- Nest Arc Upper -->
+  <path d="M140 240 C 140 150, 240 120, 280 120 C 230 140, 180 180, 180 240 C 180 300, 240 330, 290 330 C 330 330, 360 300, 370 270 C 360 290, 330 310, 290 310 C 220 310, 160 270, 140 240 Z" fill="url(#goldGrad)"/>
+
+  <!-- Golden Diamond / Seed in the Nest Center (Wealth Sprout) -->
+  <polygon points="256,150 290,195 256,240 222,195" fill="#FFFBEB"/>
+  <polygon points="256,150 290,195 256,240 222,195" fill="url(#goldGrad)" opacity="0.9"/>
+  <polygon points="256,165 278,195 256,225 234,195" fill="#FFFFFF"/>
+
+  <!-- Upward Trend Arrow / Stems -->
+  <path d="M280 195 L370 115 M370 115 L320 115 M370 115 L370 165" stroke="url(#goldGrad)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Little Sparkles -->
+  <circle cx="395" cy="95" r="8" fill="#FDE047"/>
+  <circle cx="120" cy="180" r="5" fill="#FDE047" opacity="0.6"/>
+  <circle cx="410" cy="270" r="5" fill="#FDE047" opacity="0.6"/>
+</svg>

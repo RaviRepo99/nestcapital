@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "CapitalNest Nepal",
+  "short_name": "CapitalNest",
+  "description": "Smart, secure, and professional Nepal-based investment management application.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0B192C",
+  "theme_color": "#0B192C",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/capitalnest.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
