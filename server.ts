@@ -415,11 +415,12 @@ async function hydrateDbFromSupabase() {
 
 // Token / Session store in-memory
 const SESSIONS = new Map<string, { userId: string; role: string; email: string }>();
+const SESSION_SECRET = process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || 'capitalnest-session-secret';
 
 function generateToken(user: any): string {
-  const token = 'cn_tok_' + crypto.randomBytes(24).toString('hex');
-  SESSIONS.set(token, { userId: user.id, role: user.role, email: user.email });
-  return token;
+  const payload = Buffer.from(JSON.stringify({ userId: user.id, role: user.role, email: user.email })).toString('base64url');
+  const signature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+  return `cn_tok_${payload}.${signature}`;
 }
 
 // Auth Middleware
@@ -433,6 +434,31 @@ function authMiddleware(req: Request, res: Response, next: Function) {
   const session = SESSIONS.get(token);
 
   if (!session) {
+    const signedToken = token.startsWith('cn_tok_') ? token.slice(7) : '';
+    const [payload, signature] = signedToken.split('.');
+    if (payload && signature) {
+      const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(payload).digest('base64url');
+      const signatureBuffer = Buffer.from(signature);
+      const expectedSignatureBuffer = Buffer.from(expectedSignature);
+      const validSignature = signatureBuffer.length === expectedSignatureBuffer.length
+        && crypto.timingSafeEqual(signatureBuffer, expectedSignatureBuffer);
+      if (validSignature) {
+        try {
+          const signedSession = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+          if (signedSession.userId) {
+            const db = readDb();
+            const user = db.users.find((candidate: any) => candidate.id === signedSession.userId);
+            if (user && !user.isBlocked) {
+              (req as any).user = user;
+              return next();
+            }
+          }
+        } catch {
+          // Continue with the legacy token checks below.
+        }
+      }
+    }
+
     // If token exists in mock/default format, check if we can resolve standard demo user
     if (token === 'demo-token-investor') {
       const db = readDb();
