@@ -27,6 +27,7 @@ export const InvestModal: React.FC = () => {
       setAmount(selectedPlan.minimumAmount);
       setError(null);
       setSuccess(false);
+      void refreshUserData();
     }
   }, [selectedPlan]);
 
@@ -36,6 +37,7 @@ export const InvestModal: React.FC = () => {
   const maxAmount = selectedPlan.maximumAmount || 1000000;
   const availableBal = wallet?.availableBalance || 0;
   const isInsufficient = availableBal < amount;
+  const minimumShortfall = Math.max(0, minAmount - availableBal);
 
   const totalProfit = calculateProfit(amount, selectedPlan.returnRate);
   const totalReturn = calculateTotalReturn(amount, selectedPlan.returnRate);
@@ -210,6 +212,13 @@ export const InvestModal: React.FC = () => {
                     </button>
                   ))}
                 </div>
+                {(isInsufficient || amount < minAmount) && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                    {minimumShortfall > 0
+                      ? `You need ${formatNPR(minimumShortfall)} more to buy this package.`
+                      : `Minimum for this package is ${formatNPR(minAmount)}.`}
+                  </div>
+                )}
               </div>
 
               {/* Dynamic Projection Breakdown */}

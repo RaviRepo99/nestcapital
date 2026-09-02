@@ -1282,7 +1282,7 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
   const { planId, amount } = req.body;
 
   const invAmount = Number(amount);
-  if (!planId || !invAmount || invAmount <= 0) {
+  if (!planId || !Number.isFinite(invAmount) || invAmount <= 0) {
     return res.status(400).json({ error: 'Valid plan and investment amount are required.' });
   }
 
