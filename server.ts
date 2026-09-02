@@ -385,7 +385,9 @@ function readDb() {
   } catch (err) {
     console.error('Error reading DB, reinitializing:', err);
     const initialData = getInitialDb();
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
+    if (!process.env.VERCEL) {
+      fs.writeFileSync(DB_FILE, JSON.stringify(initialData, null, 2), 'utf-8');
+    }
     liveDb = initialData;
     return liveDb;
   }
@@ -417,7 +419,9 @@ async function hydrateDbFromSupabase() {
 
   if (data?.data) {
     liveDb = data.data;
-    fs.writeFileSync(DB_FILE, JSON.stringify(liveDb, null, 2), 'utf-8');
+    if (!process.env.VERCEL) {
+      fs.writeFileSync(DB_FILE, JSON.stringify(liveDb, null, 2), 'utf-8');
+    }
   } else {
     const localData = readDb();
     const { error: seedError } = await supabase.from('app_state').upsert({
