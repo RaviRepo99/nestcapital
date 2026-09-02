@@ -99,11 +99,11 @@ export const ReferralsPage: React.FC = () => {
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
-          <span className="text-xs text-slate-500 font-semibold block mb-1">Fixed Reward</span>
+          <span className="text-xs text-slate-500 font-semibold block mb-1">Commission Tier</span>
           <div className="text-2xl font-black font-display text-amber-500">
-            NPR 100 + NPR 50
+            5% per investment
           </div>
-          <span className="text-[11px] text-slate-400">Referrer + new user bonus</span>
+          <span className="text-[11px] text-slate-400">Plus NPR 100 signup reward</span>
         </div>
 
         <div className="p-5 rounded-3xl bg-white border border-slate-200/80 shadow-xs">

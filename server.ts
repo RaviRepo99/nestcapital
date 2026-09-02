@@ -65,6 +65,14 @@ function normalizePhone(phone: string): string {
   return digits.startsWith('977') && digits.length === 13 ? digits.slice(3) : digits;
 }
 
+function makeUniqueReferralCode(name: string, users: any[]): string {
+  const prefix = name.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 8) || 'USER';
+  let code = '';
+  do code = `${prefix}${crypto.randomInt(100000, 1000000)}`;
+  while (users.some((candidate: any) => candidate.referralCode?.toUpperCase() === code));
+  return code;
+}
+
 const DEFAULT_PAYMENT_SETTINGS = [
   { id: 'esewa', title: 'eSewa Merchant Wallet', accountName: 'CapitalNest Nepal Pvt. Ltd.', accountId: '9841234567', qrImage: '' },
   { id: 'khalti', title: 'Khalti Merchant ID', accountName: 'CapitalNest Nepal Pvt. Ltd.', accountId: '9801234567', qrImage: '' },
@@ -687,7 +695,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 
   // Generate clean referral code from full name
-  const cleanNameCode = fullName.split(' ')[0].replace(/[^A-Za-z]/g, '').toUpperCase() + Math.floor(100 + Math.random() * 900);
+  const cleanNameCode = makeUniqueReferralCode(fullName, db.users);
   const userId = 'usr_' + crypto.randomBytes(8).toString('hex');
 
   // Check referrer if provided
@@ -873,7 +881,7 @@ app.post('/api/auth/session', async (req, res) => {
   }
 
   if (!user && pending) {
-    const cleanNameCode = pending.fullName.split(' ')[0].replace(/[^A-Za-z]/g, '').toUpperCase() + Math.floor(100 + Math.random() * 900);
+    const cleanNameCode = makeUniqueReferralCode(pending.fullName, db.users);
     const newUser = {
       id: data.user.id,
       email,
@@ -1244,7 +1252,7 @@ app.get('/api/investments', authMiddleware, (req, res) => {
 });
 
 // Create new Investment
-app.post('/api/investments', authMiddleware, (req, res) => {
+app.post('/api/investments', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const { planId, amount } = req.body;
 
@@ -1344,6 +1352,15 @@ app.post('/api/investments', authMiddleware, (req, res) => {
     createdAt: new Date().toISOString(),
   };
 
+  if (supabase && user.referredBy) {
+    const { error: commissionError } = await supabase.rpc('process_referral_investment_commission', {
+      p_referred_user_id: user.id,
+      p_investment_id: investmentId,
+      p_investment_amount: invAmount,
+    });
+    if (commissionError) return res.status(500).json({ error: `Referral commission processing failed: ${commissionError.message}` });
+  }
+
   db.investments.unshift(newInvestment);
   db.transactions.unshift(newTx);
   db.notifications.unshift(newNotif);
@@ -1354,7 +1371,7 @@ app.post('/api/investments', authMiddleware, (req, res) => {
       (u: any) => u.referralCode?.toUpperCase() === user.referredBy?.toUpperCase() || u.id === user.referredBy
     );
     if (referrer) {
-      const commissionRate = 0.05; // 5%
+      const commissionRate = 0.05;
       const commissionAmount = invAmount * commissionRate;
 
       const refWalletIndex = db.wallets.findIndex((w: any) => w.userId === referrer.id);

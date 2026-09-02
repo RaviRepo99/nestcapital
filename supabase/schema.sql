@@ -263,6 +263,46 @@ $$;
 revoke all on function public.process_referral_reward(uuid) from public;
 grant execute on function public.process_referral_reward(uuid) to authenticated, service_role;
 
+create or replace function public.process_referral_investment_commission(p_referred_user_id uuid, p_investment_id text, p_investment_amount numeric)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  referred_user profiles%rowtype;
+  referrer profiles%rowtype;
+  referral_row referrals%rowtype;
+  commission numeric;
+begin
+  if auth.uid() is distinct from p_referred_user_id and auth.role() <> 'service_role' then
+    raise exception 'You may only process your own investment commission';
+  end if;
+  if p_investment_amount is null or p_investment_amount <= 0 then raise exception 'Investment amount must be positive'; end if;
+  select * into referred_user from public.profiles where id = p_referred_user_id for update;
+  if not found or referred_user.referred_by is null then return jsonb_build_object('commission_paid', false, 'reason', 'no_referrer'); end if;
+  select * into referrer from public.profiles where upper(referral_code) = upper(btrim(referred_user.referred_by)) and id <> p_referred_user_id for update;
+  if not found then return jsonb_build_object('commission_paid', false, 'reason', 'invalid_referrer'); end if;
+  select * into referral_row from public.referrals where referred_user_id = p_referred_user_id for update;
+  if not found or referral_row.referrer_id <> referrer.id then return jsonb_build_object('commission_paid', false, 'reason', 'referral_not_found'); end if;
+
+  commission := round(p_investment_amount * 0.05, 2);
+  if exists (select 1 from public.transactions where user_id = referrer.id and reference = 'REF-INVEST-' || upper(p_investment_id)) then
+    return jsonb_build_object('commission_paid', false, 'reason', 'already_processed');
+  end if;
+  insert into public.wallets (user_id) values (referrer.id) on conflict (user_id) do nothing;
+  update public.wallets set referral_earnings = referral_earnings + commission, updated_at = now() where user_id = referrer.id;
+  update public.referrals set total_invested_by_referred = total_invested_by_referred + p_investment_amount, bonus_earned = bonus_earned + commission where id = referral_row.id;
+  insert into public.transactions (id, user_id, type, direction, amount, reference, description, status)
+  values ('tx_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'referral_bonus', 'in', commission, 'REF-INVEST-' || upper(p_investment_id), '5% referral commission from ' || referred_user.full_name || '''s investment', 'completed');
+  insert into public.notifications (id, user_id, title, message, type, read)
+  values ('notif_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'Referral Commission Earned', 'You earned NPR ' || commission::text || ' commission from your referral''s investment.', 'referral', false);
+  return jsonb_build_object('commission_paid', true, 'commission_rate', 5, 'commission_amount', commission);
+end;
+$$;
+revoke all on function public.process_referral_investment_commission(uuid, text, numeric) from public;
+grant execute on function public.process_referral_investment_commission(uuid, text, numeric) to authenticated, service_role;
+
 alter table public.profiles enable row level security;
 alter table public.wallets enable row level security;
 alter table public.investment_plans enable row level security;
@@ -314,6 +354,25 @@ end;
 $$;
 drop trigger if exists protect_profile_fields_trigger on public.profiles;
 create trigger protect_profile_fields_trigger before update on public.profiles for each row execute function public.protect_profile_fields();
+
+create or replace function public.ensure_unique_referral_code()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.referral_code is null or btrim(new.referral_code) = '' or exists (select 1 from public.profiles where referral_code = new.referral_code and id <> new.id) then
+    loop
+      new.referral_code := upper(left(regexp_replace(coalesce(new.full_name, 'USER'), '[^A-Za-z]', '', 'g'), 8)) || lpad((floor(random() * 900000) + 100000)::text, 6, '0');
+      exit when not exists (select 1 from public.profiles where referral_code = new.referral_code and id <> new.id);
+    end loop;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists ensure_unique_referral_code_trigger on public.profiles;
+create trigger ensure_unique_referral_code_trigger before insert or update of referral_code, full_name on public.profiles for each row execute function public.ensure_unique_referral_code();
 
 drop policy if exists "profiles own or admin" on public.profiles;
 create policy "profiles readable own or admin" on public.profiles for select using (id = auth.uid() or public.is_admin());
