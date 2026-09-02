@@ -1081,21 +1081,24 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password.' });
   }
 
+  let supabaseProfile: any = null;
   if (!user && supabase) {
-    const { data: profile } = await supabase.from('profiles').select('*').eq('email', normalizedEmail).maybeSingle();
-    if (profile) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('email', normalizedEmail).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    supabaseProfile = profile;
+    if (supabaseProfile) {
       user = {
-        id: profile.id,
-        email: profile.email,
-        fullName: profile.full_name,
-        phone: profile.phone || '',
-        role: profile.role,
-        referralCode: profile.referral_code,
-        referredBy: profile.referred_by || undefined,
-        kycStatus: profile.kyc_status,
+        id: supabaseProfile.id,
+        email: supabaseProfile.email,
+        fullName: supabaseProfile.full_name,
+        phone: supabaseProfile.phone || '',
+        role: supabaseProfile.role,
+        referralCode: supabaseProfile.referral_code,
+        referredBy: supabaseProfile.referred_by || undefined,
+        kycStatus: supabaseProfile.kyc_status,
         emailVerified: true,
-        isBlocked: profile.is_blocked,
-        createdAt: profile.created_at,
+        isBlocked: supabaseProfile.is_blocked,
+        createdAt: supabaseProfile.created_at,
       };
       db.users.push(user);
     }
@@ -1105,7 +1108,10 @@ app.post('/api/auth/login', async (req, res) => {
   const token = generateToken(user);
   let wallet = db.wallets.find((w: any) => w.userId === user.id);
   if (supabase) {
-    const { data: profile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    const { data: profile, error: profileError } = supabaseProfile
+      ? { data: supabaseProfile, error: null }
+      : await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
     if (profile) {
       const { data: liveWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
       if (walletError) return res.status(500).json({ error: walletError.message });
@@ -1143,24 +1149,27 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   await reconcileSupabaseReferralForUser(user.email);
   const db = readDb();
+  let supabaseProfile: any = null;
   if (supabase) {
-    const { data: profile } = await supabase.from('profiles').select('*').eq('email', user.email).maybeSingle();
-    if (profile) {
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('email', user.email).maybeSingle();
+    if (profileError) return res.status(500).json({ error: profileError.message });
+    supabaseProfile = profile;
+    if (supabaseProfile) {
       Object.assign(user, {
-        id: profile.id,
-        email: profile.email,
-        fullName: profile.full_name,
-        phone: profile.phone,
-        avatar: profile.avatar,
-        role: profile.role,
-        referralCode: profile.referral_code,
-        referredBy: profile.referred_by || undefined,
-        kycStatus: profile.kyc_status,
-        kycDocumentType: profile.kyc_document_type,
-        kycDocumentNumber: profile.kyc_document_number,
-        twoFactorEnabled: profile.two_factor_enabled,
-        isBlocked: profile.is_blocked,
-        createdAt: profile.created_at,
+        id: supabaseProfile.id,
+        email: supabaseProfile.email,
+        fullName: supabaseProfile.full_name,
+        phone: supabaseProfile.phone,
+        avatar: supabaseProfile.avatar,
+        role: supabaseProfile.role,
+        referralCode: supabaseProfile.referral_code,
+        referredBy: supabaseProfile.referred_by || undefined,
+        kycStatus: supabaseProfile.kyc_status,
+        kycDocumentType: supabaseProfile.kyc_document_type,
+        kycDocumentNumber: supabaseProfile.kyc_document_number,
+        twoFactorEnabled: supabaseProfile.two_factor_enabled,
+        isBlocked: supabaseProfile.is_blocked,
+        createdAt: supabaseProfile.created_at,
       });
     }
   }
@@ -1176,7 +1185,7 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
     updatedAt: new Date().toISOString(),
   };
   if (supabase) {
-    const { data: profile } = await supabase.from('profiles').select('*').eq('email', user.email).maybeSingle();
+    const profile = supabaseProfile;
     if (profile) {
       const { data: liveWallet } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
       wallet = mapSupabaseWallet(liveWallet, profile.id);
