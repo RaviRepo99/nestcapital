@@ -784,7 +784,20 @@ app.post('/api/auth/login', async (req, res) => {
 
   const db = readDb();
   const normalizedEmail = email.toLowerCase().trim();
-  const user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+  let user = db.users.find((u: any) => u.email.toLowerCase() === normalizedEmail);
+
+  const seedEmail = process.env.ADMIN_SEED_EMAIL?.toLowerCase().trim();
+  const seedPassword = process.env.ADMIN_SEED_PASSWORD;
+  if (seedEmail && seedPassword && normalizedEmail === seedEmail && password === seedPassword) {
+    const seededAdmin = db.users.find((candidate: any) => candidate.role === 'admin');
+    if (seededAdmin) {
+      seededAdmin.email = seedEmail;
+      seededAdmin.passwordHash = hashPassword(seedPassword);
+      seededAdmin.emailVerified = true;
+      user = seededAdmin;
+      writeDb(db);
+    }
+  }
 
   if (!user) {
     return res.status(401).json({ error: 'Invalid email or password.' });
