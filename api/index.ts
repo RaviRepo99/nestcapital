@@ -1,4 +1,11 @@
-import app from '../server.ts';
+import * as serverModule from '../dist/server.cjs';
+
+const loadedModule = serverModule as any;
+const app = typeof loadedModule === 'function'
+  ? loadedModule
+  : typeof loadedModule.default === 'function'
+    ? loadedModule.default
+    : loadedModule.default?.default;
 
 export default function handler(req: any, res: any) {
   const apiPath = typeof req.query?.path === 'string' ? req.query.path : '';
