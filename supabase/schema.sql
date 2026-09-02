@@ -166,6 +166,9 @@ create table if not exists public.support_tickets (
   updated_at timestamptz not null default now()
 );
 
+alter table public.support_tickets add column if not exists user_name text not null default '';
+alter table public.support_tickets add column if not exists user_email text not null default '';
+
 create table if not exists public.payment_settings (
   id text primary key check (id in ('esewa', 'khalti', 'fonepay')),
   title text not null,
@@ -330,6 +333,12 @@ begin
     join pg_class c on c.oid = pr.prrelid
     where p.pubname = 'supabase_realtime' and c.relname = 'referrals'
   ) then alter publication supabase_realtime add table public.referrals; end if;
+  if not exists (
+    select 1 from pg_publication_rel pr
+    join pg_publication p on p.oid = pr.prpubid
+    join pg_class c on c.oid = pr.prrelid
+    where p.pubname = 'supabase_realtime' and c.relname = 'support_tickets'
+  ) then alter publication supabase_realtime add table public.support_tickets; end if;
 end $$;
 
 create or replace function public.is_admin()

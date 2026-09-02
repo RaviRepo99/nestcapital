@@ -15,6 +15,7 @@ import {
   Building,
 } from 'lucide-react';
 import { SupportTicket } from '../types';
+import { supabase } from '../lib/supabase';
 
 export const SupportPage: React.FC = () => {
   const { setActiveModal, showToast, user } = useAuth();
@@ -49,7 +50,12 @@ export const SupportPage: React.FC = () => {
 
   useEffect(() => {
     fetchTickets();
-  }, []);
+    const channel = supabase
+      .channel(`support-ticket-updates-${user?.id || 'anonymous'}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets', filter: `user_id=eq.${user?.id}` }, () => void fetchTickets())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   const handleCreateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,7 +216,7 @@ export const SupportPage: React.FC = () => {
                   <h4 className="font-bold text-xs text-slate-900 line-clamp-1">{t.subject}</h4>
                   <p className="text-[11px] text-slate-500 line-clamp-2 mt-1">{t.message}</p>
                   <div className="text-[10px] text-slate-400 mt-3 pt-2 border-t border-slate-100 flex justify-between">
-                    <span>{t.messages.length} messages</span>
+                    <span>{t.replies.length} messages</span>
                     <span>{formatDate(t.createdAt)}</span>
                   </div>
                 </div>
@@ -239,21 +245,21 @@ export const SupportPage: React.FC = () => {
           </div>
 
           <div className="space-y-3 max-h-80 overflow-y-auto p-2">
-            {selectedTicket.messages.map((m) => (
+            {selectedTicket.replies.map((m) => (
               <div
                 key={m.id}
                 className={`p-3.5 rounded-2xl text-xs space-y-1 ${
-                  m.sender === 'user'
+                  m.senderRole === 'user'
                     ? 'bg-slate-50 border border-slate-200 text-slate-900 ml-6'
                     : 'bg-[#0B192C] text-white mr-6'
                 }`}
               >
                 <div className="flex justify-between font-bold text-[10px]">
-                  <span className={m.sender === 'user' ? 'text-slate-700' : 'text-amber-400'}>
+                  <span className={m.senderRole === 'user' ? 'text-slate-700' : 'text-amber-400'}>
                     {m.senderName}
                   </span>
-                  <span className={m.sender === 'user' ? 'text-slate-400' : 'text-slate-400'}>
-                    {formatDate(m.timestamp)}
+                  <span className="text-slate-400">
+                    {formatDate(m.createdAt)}
                   </span>
                 </div>
                 <p className="leading-relaxed">{m.message}</p>

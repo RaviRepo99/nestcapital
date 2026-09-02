@@ -65,6 +65,23 @@ function normalizePhone(phone: string): string {
   return digits.startsWith('977') && digits.length === 13 ? digits.slice(3) : digits;
 }
 
+function mapSupabaseTicket(ticket: any): any {
+  return {
+    id: ticket.id,
+    userId: ticket.user_id,
+    userName: ticket.user_name || '',
+    userEmail: ticket.user_email || '',
+    subject: ticket.subject,
+    category: ticket.category,
+    message: ticket.message,
+    attachment: ticket.attachment || undefined,
+    status: ticket.status,
+    replies: Array.isArray(ticket.replies) ? ticket.replies : [],
+    createdAt: ticket.created_at,
+    updatedAt: ticket.updated_at,
+  };
+}
+
 function makeUniqueReferralCode(name: string, users: any[]): string {
   const prefix = name.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 8) || 'USER';
   let code = '';
@@ -1802,19 +1819,41 @@ app.post('/api/notifications/read-all', authMiddleware, (req, res) => {
 // --- SUPPORT TICKETS ---
 
 // Get support tickets
-app.get('/api/support/tickets', authMiddleware, (req, res) => {
+app.get('/api/support/tickets', authMiddleware, async (req, res) => {
   const user = (req as any).user;
+  if (supabase) {
+    const { data, error } = await supabase.from('support_tickets').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json((data || []).map(mapSupabaseTicket));
+  }
   const db = readDb();
   const tickets = db.supportTickets.filter((t: any) => t.userId === user.id);
   res.json(tickets);
 });
 
 // Create support ticket
-app.post('/api/support/tickets', authMiddleware, (req, res) => {
+app.post('/api/support/tickets', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const { subject, category, message, attachment } = req.body;
 
   if (!subject || !message) {
+      if (supabase) {
+        const ticket = {
+          id: `tkt_${crypto.randomBytes(6).toString('hex')}`,
+          user_id: user.id,
+          user_name: user.fullName,
+          user_email: user.email,
+          subject: subject.trim(),
+          category: category || 'general',
+          message: message.trim(),
+          attachment: attachment || null,
+          status: 'open',
+          replies: [],
+        };
+        const { data, error } = await supabase.from('support_tickets').insert(ticket).select('*').single();
+        if (error) return res.status(500).json({ error: error.message });
+        return res.status(201).json({ message: 'Support ticket submitted successfully.', ticket: mapSupabaseTicket(data) });
+      }
     return res.status(400).json({ error: 'Subject and message are required.' });
   }
 
@@ -1843,12 +1882,21 @@ app.post('/api/support/tickets', authMiddleware, (req, res) => {
 });
 
 // Reply to support ticket
-app.post('/api/support/tickets/:id/reply', authMiddleware, (req, res) => {
+app.post('/api/support/tickets/:id/reply', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const { id } = req.params;
   const { message } = req.body;
 
   if (!message || !message.trim()) {
+      if (supabase) {
+        const { data: ticket, error: lookupError } = await supabase.from('support_tickets').select('*').eq('id', id).eq('user_id', user.id).maybeSingle();
+        if (lookupError) return res.status(500).json({ error: lookupError.message });
+        if (!ticket) return res.status(404).json({ error: 'Ticket not found.' });
+        const reply = { id: `rep_${crypto.randomBytes(6).toString('hex')}`, senderRole: 'user', senderName: user.fullName, message: message.trim(), createdAt: new Date().toISOString() };
+        const { data: updated, error } = await supabase.from('support_tickets').update({ replies: [...(ticket.replies || []), reply], status: 'open', updated_at: new Date().toISOString() }).eq('id', id).select('*').single();
+        if (error) return res.status(500).json({ error: error.message });
+        return res.json({ message: 'Reply sent', ticket: mapSupabaseTicket(updated) });
+      }
     return res.status(400).json({ error: 'Message cannot be empty.' });
   }
 
@@ -2784,16 +2832,31 @@ app.put('/api/admin/plans/:id', adminMiddleware, (req, res) => {
 });
 
 // Admin Support Tickets
-app.get('/api/admin/tickets', adminMiddleware, (req, res) => {
+app.get('/api/admin/tickets', adminMiddleware, async (req, res) => {
   const db = readDb();
+  if (supabase) {
+    const { data, error } = await supabase.from('support_tickets').select('*').order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    return res.json((data || []).map(mapSupabaseTicket));
+  }
   res.json(db.supportTickets);
 });
 
-app.post('/api/admin/tickets/:id/reply', adminMiddleware, (req, res) => {
+app.post('/api/admin/tickets/:id/reply', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { message, status } = req.body;
 
   if (!message) return res.status(400).json({ error: 'Message is required.' });
+  if (supabase) {
+    const { data: ticket, error: lookupError } = await supabase.from('support_tickets').select('*').eq('id', id).maybeSingle();
+    if (lookupError) return res.status(500).json({ error: lookupError.message });
+    if (!ticket) return res.status(404).json({ error: 'Ticket not found.' });
+    const reply = { id: `rep_${crypto.randomBytes(6).toString('hex')}`, senderRole: 'admin', senderName: 'CapitalNest Support Agent', message: message.trim(), createdAt: new Date().toISOString() };
+    const { data: updated, error } = await supabase.from('support_tickets').update({ replies: [...(ticket.replies || []), reply], status: status || ticket.status, updated_at: new Date().toISOString() }).eq('id', id).select('*').single();
+    if (error) return res.status(500).json({ error: error.message });
+    await supabase.from('notifications').insert({ id: `notif_${crypto.randomBytes(6).toString('hex')}`, user_id: ticket.user_id, title: 'Support Ticket Reply', message: `Support replied to your ticket "${ticket.subject}".`, type: 'system', read: false });
+    return res.json({ message: 'Ticket updated and reply sent.', ticket: mapSupabaseTicket(updated) });
+  }
 
   const db = readDb();
   const ticket = db.supportTickets.find((t: any) => t.id === id);

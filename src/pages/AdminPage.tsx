@@ -111,6 +111,7 @@ export const AdminPage: React.FC = () => {
       .channel('admin-referral-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'referrals' }, scheduleRefresh)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets' }, scheduleRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, scheduleRefresh)
       .subscribe();
     return () => { if (refreshTimer) window.clearTimeout(refreshTimer); void supabase.removeChannel(channel); };
   }, [isAdmin]);
