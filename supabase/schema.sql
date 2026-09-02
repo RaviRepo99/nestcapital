@@ -375,9 +375,13 @@ drop trigger if exists ensure_unique_referral_code_trigger on public.profiles;
 create trigger ensure_unique_referral_code_trigger before insert or update of referral_code, full_name on public.profiles for each row execute function public.ensure_unique_referral_code();
 
 drop policy if exists "profiles own or admin" on public.profiles;
+drop policy if exists "profiles readable own or admin" on public.profiles;
+drop policy if exists "profiles update own or admin" on public.profiles;
 create policy "profiles readable own or admin" on public.profiles for select using (id = auth.uid() or public.is_admin());
 create policy "profiles update own or admin" on public.profiles for update using (id = auth.uid() or public.is_admin()) with check (id = auth.uid() or public.is_admin());
 drop policy if exists "wallets own or admin" on public.wallets;
+drop policy if exists "wallets readable own or admin" on public.wallets;
+drop policy if exists "wallets admin write" on public.wallets;
 create policy "wallets readable own or admin" on public.wallets for select using (user_id = auth.uid() or public.is_admin());
 create policy "wallets admin write" on public.wallets for update using (public.is_admin()) with check (public.is_admin());
 drop policy if exists "plans readable" on public.investment_plans;
@@ -393,6 +397,7 @@ create policy "withdrawals own or admin" on public.withdrawals for all using (us
 drop policy if exists "transactions own or admin" on public.transactions;
 create policy "transactions own or admin" on public.transactions for all using (user_id = auth.uid() or public.is_admin()) with check (user_id = auth.uid() or public.is_admin());
 drop policy if exists "referrals involved or admin" on public.referrals;
+drop policy if exists "referrals admin write" on public.referrals;
 create policy "referrals involved or admin" on public.referrals for select using (referrer_id = auth.uid() or referred_user_id = auth.uid() or public.is_admin());
 create policy "referrals admin write" on public.referrals for update using (public.is_admin()) with check (public.is_admin());
 drop policy if exists "notifications own or admin" on public.notifications;
