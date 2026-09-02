@@ -14,6 +14,8 @@ export interface User {
   kycDocumentType?: string;
   kycDocumentNumber?: string;
   kycDocumentImage?: string;
+  kycDocumentImageFront?: string;
+  kycDocumentImageBack?: string;
   twoFactorEnabled?: boolean;
   isBlocked?: boolean;
   registrationIp?: string;

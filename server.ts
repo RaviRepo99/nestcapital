@@ -404,6 +404,18 @@ function mapSupabaseWallet(wallet: any, userId: string) {
   };
 }
 
+function getKycImages(profile: any) {
+  if (profile.kyc_document_image_front || profile.kyc_document_image_back) {
+    return { front: profile.kyc_document_image_front || '', back: profile.kyc_document_image_back || '' };
+  }
+  try {
+    const legacy = JSON.parse(profile.kyc_document_image || '{}');
+    return { front: legacy.front || '', back: legacy.back || '' };
+  } catch {
+    return { front: profile.kyc_document_image || '', back: '' };
+  }
+}
+
 async function hydrateDbFromSupabase() {
   if (!supabase) {
     liveDb = getInitialDb();
@@ -1106,9 +1118,9 @@ app.post('/api/auth/forgot-password', (req, res) => {
 });
 
 // Submit KYC
-app.post('/api/auth/kyc', authMiddleware, (req, res) => {
+app.post('/api/auth/kyc', authMiddleware, async (req, res) => {
   const user = (req as any).user;
-  const { documentType, documentNumber, documentImage } = req.body;
+  const { documentType, documentNumber, documentImageFront, documentImageBack } = req.body;
 
   if (!documentType || !documentNumber) {
     return res.status(400).json({ error: 'Document type and identification number are required.' });
@@ -1117,11 +1129,37 @@ app.post('/api/auth/kyc', authMiddleware, (req, res) => {
   const db = readDb();
   const userIndex = db.users.findIndex((u: any) => u.id === user.id);
 
+  if (supabase) {
+    const { data: profile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    if (profile) {
+      const kycImages = { front: documentImageFront || '', back: documentImageBack || '' };
+      let { error } = await supabase.from('profiles').update({
+        kyc_status: 'pending',
+        kyc_document_type: documentType,
+        kyc_document_number: documentNumber.trim(),
+        kyc_document_image_front: documentImageFront || null,
+        kyc_document_image_back: documentImageBack || null,
+      }).eq('id', profile.id);
+      if (error && /column .* does not exist/i.test(error.message)) {
+        const fallback = await supabase.from('profiles').update({
+          kyc_status: 'pending',
+          kyc_document_type: documentType,
+          kyc_document_number: documentNumber.trim(),
+          kyc_document_image: JSON.stringify(kycImages),
+        }).eq('id', profile.id);
+        error = fallback.error;
+      }
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ message: 'KYC documents submitted for verification.', user: { ...user, kycStatus: 'pending', kycDocumentType: documentType, kycDocumentNumber: documentNumber.trim(), kycDocumentImageFront: documentImageFront, kycDocumentImageBack: documentImageBack } });
+    }
+  }
+
   if (userIndex !== -1) {
     db.users[userIndex].kycStatus = 'pending';
     db.users[userIndex].kycDocumentType = documentType;
     db.users[userIndex].kycDocumentNumber = documentNumber;
-    if (documentImage) db.users[userIndex].kycDocumentImage = documentImage;
+    if (documentImageFront) db.users[userIndex].kycDocumentImageFront = documentImageFront;
+    if (documentImageBack) db.users[userIndex].kycDocumentImageBack = documentImageBack;
 
     db.notifications.push({
       id: 'notif_' + crypto.randomBytes(6).toString('hex'),
@@ -1973,6 +2011,7 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
     if (!profilesError && !walletsError && !investmentsError && !referralsError && profiles) {
       const profilesById = new Map(profiles.map((profile: any) => [profile.id, profile]));
       return res.json(profiles.map((profile: any) => {
+        const kycImages = getKycImages(profile);
         const userWallet = wallets?.find((wallet: any) => wallet.user_id === profile.id);
         const userInvestments = investments?.filter((investment: any) => investment.user_id === profile.id) || [];
         const userReferrals = referrals?.filter((referral: any) => referral.referrer_id === profile.id) || [];
@@ -1989,6 +2028,8 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
           kycStatus: profile.kyc_status,
           kycDocumentType: profile.kyc_document_type,
           kycDocumentNumber: profile.kyc_document_number,
+          kycDocumentImageFront: kycImages.front,
+          kycDocumentImageBack: kycImages.back,
           twoFactorEnabled: profile.two_factor_enabled,
           isBlocked: profile.is_blocked,
           emailVerified: profile.email_verified,

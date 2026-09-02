@@ -139,7 +139,7 @@ export const api = {
     });
   },
 
-  async submitKYC(data: { documentType: string; documentNumber: string; documentImage?: string }): Promise<{ user: User; message: string }> {
+  async submitKYC(data: { documentType: string; documentNumber: string; documentImageFront?: string; documentImageBack?: string }): Promise<{ user: User; message: string }> {
     return request('/api/auth/kyc', {
       method: 'POST',
       body: JSON.stringify(data),

@@ -15,6 +15,8 @@ create table if not exists public.profiles (
   kyc_document_type text,
   kyc_document_number text,
   kyc_document_image text,
+  kyc_document_image_front text,
+  kyc_document_image_back text,
   two_factor_enabled boolean not null default false,
   is_blocked boolean not null default false,
   email_verified boolean not null default false,
@@ -22,6 +24,8 @@ create table if not exists public.profiles (
 );
 
 alter table public.profiles add column if not exists email_verified boolean not null default false;
+alter table public.profiles add column if not exists kyc_document_image_front text;
+alter table public.profiles add column if not exists kyc_document_image_back text;
 
 create table if not exists public.wallets (
   user_id uuid primary key references public.profiles(id) on delete cascade,

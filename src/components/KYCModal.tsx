@@ -17,20 +17,22 @@ export const KYCModal: React.FC = () => {
 
   const [documentType, setDocumentType] = useState('Citizenship Card');
   const [documentNumber, setDocumentNumber] = useState('');
-  const [documentImage, setDocumentImage] = useState('');
+  const [documentImageFront, setDocumentImageFront] = useState('');
+  const [documentImageBack, setDocumentImageBack] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
   if (activeModal !== 'kyc') return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setDocumentImage(reader.result as string);
-        showToast('Document scan attached.', 'success');
+        if (side === 'front') setDocumentImageFront(reader.result as string);
+        else setDocumentImageBack(reader.result as string);
+        showToast(`${side === 'front' ? 'Front' : 'Back'} document attached.`, 'success');
       };
       reader.readAsDataURL(file);
     }
@@ -50,7 +52,8 @@ export const KYCModal: React.FC = () => {
       await api.submitKYC({
         documentType,
         documentNumber: documentNumber.trim(),
-        documentImage,
+        documentImageFront,
+        documentImageBack,
       });
 
       setSubmitted(true);
@@ -138,15 +141,25 @@ export const KYCModal: React.FC = () => {
 
               <div>
                 <label className="text-xs font-bold text-slate-700 block mb-1">
-                  Upload Photo of Document (Front / Both sides)
+                  Upload Front Document Photo
                 </label>
                 <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 rounded-2xl hover:border-amber-500 hover:bg-slate-50 cursor-pointer transition text-center">
                   <Upload className="w-6 h-6 text-slate-400 mb-1" />
                   <span className="text-xs font-semibold text-slate-700">
-                    {documentImage ? 'Document photo attached' : 'Click to upload or drag & drop'}
+                    {documentImageFront ? 'Front document attached' : 'Click to upload front photo'}
                   </span>
                   <span className="text-[10px] text-slate-400 mt-0.5">JPG, PNG or PDF up to 10MB</span>
-                  <input type="file" accept="image/*,.pdf" onChange={handleFileUpload} className="hidden" />
+                  <input type="file" accept="image/*,.pdf" onChange={(e) => handleFileUpload(e, 'front')} className="hidden" />
+                </label>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 block mb-1">Upload Back Document Photo</label>
+                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 rounded-2xl hover:border-amber-500 hover:bg-slate-50 cursor-pointer transition text-center">
+                  <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                  <span className="text-xs font-semibold text-slate-700">{documentImageBack ? 'Back document attached' : 'Click to upload back photo'}</span>
+                  <span className="text-[10px] text-slate-400 mt-0.5">JPG, PNG or PDF up to 10MB</span>
+                  <input type="file" accept="image/*,.pdf" onChange={(e) => handleFileUpload(e, 'back')} className="hidden" />
                 </label>
               </div>
 
