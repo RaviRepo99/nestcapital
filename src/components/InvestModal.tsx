@@ -23,13 +23,13 @@ export const InvestModal: React.FC = () => {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    if (selectedPlan) {
+    if (selectedPlan && activeModal === 'invest') {
       setAmount(selectedPlan.minimumAmount);
       setError(null);
       setSuccess(false);
       void refreshUserData();
     }
-  }, [selectedPlan]);
+  }, [activeModal, selectedPlan]);
 
   if (activeModal !== 'invest' || !selectedPlan) return null;
 
