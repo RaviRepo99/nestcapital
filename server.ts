@@ -1981,7 +1981,23 @@ app.put('/api/admin/users/:id/credentials', adminMiddleware, async (req, res) =>
   if (!supabase) return res.status(503).json({ error: 'Supabase admin authentication is not configured.' });
   const db = readDb();
   const user = db.users.find((candidate: any) => candidate.id === req.params.id);
-  if (!user) return res.status(404).json({ error: 'User not found.' });
+  const currentEmail = typeof req.body.currentEmail === 'string' ? req.body.currentEmail.trim().toLowerCase() : user?.email?.toLowerCase();
+  let targetProfile: any = null;
+  if (currentEmail) {
+    const { data: profile } = await supabase.from('profiles').select('*').eq('email', currentEmail).maybeSingle();
+    targetProfile = profile;
+  }
+  if (!user && !targetProfile) return res.status(404).json({ error: 'User not found.' });
+  const resolvedUser = user || {
+    id: targetProfile.id,
+    email: targetProfile.email,
+    fullName: targetProfile.full_name,
+    role: targetProfile.role,
+    phone: targetProfile.phone || '',
+    referralCode: targetProfile.referral_code,
+    kycStatus: targetProfile.kyc_status,
+    createdAt: targetProfile.created_at,
+  };
 
   const nextEmail = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : undefined;
   const nextPassword = typeof req.body.password === 'string' ? req.body.password : undefined;
@@ -1991,7 +2007,7 @@ app.put('/api/admin/users/:id/credentials', adminMiddleware, async (req, res) =>
 
   const { data: authUsers, error: listError } = await supabase.auth.admin.listUsers({ page: 1, perPage: 1000 });
   if (listError) return res.status(500).json({ error: `Could not find Supabase user: ${listError.message}` });
-  const authUser = (authUsers.users as any[]).find((candidate: any) => candidate.email?.toLowerCase() === user.email.toLowerCase());
+  const authUser = (authUsers.users as any[]).find((candidate: any) => candidate.id === targetProfile?.id || candidate.email?.toLowerCase() === resolvedUser.email.toLowerCase());
   if (!authUser) return res.status(404).json({ error: 'Matching Supabase Auth user not found.' });
 
   const { error: updateError } = await supabase.auth.admin.updateUserById(authUser.id, {
@@ -2001,12 +2017,12 @@ app.put('/api/admin/users/:id/credentials', adminMiddleware, async (req, res) =>
   if (updateError) return res.status(400).json({ error: updateError.message });
 
   if (nextEmail) {
-    user.email = nextEmail;
+    resolvedUser.email = nextEmail;
     const profileUpdate = await supabase.from('profiles').update({ email: nextEmail }).eq('id', authUser.id);
     if (profileUpdate.error) return res.status(500).json({ error: `Auth updated, but profile update failed: ${profileUpdate.error.message}` });
   }
   writeDb(db);
-  const { passwordHash, ...safeUser } = user;
+  const { passwordHash, ...safeUser } = resolvedUser;
   return res.json({ user: safeUser, message: 'User credentials updated successfully.' });
 });
 

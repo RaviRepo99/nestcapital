@@ -295,7 +295,7 @@ export const api = {
       });
     },
 
-    async updateUserCredentials(userId: string, data: { email?: string; password?: string }): Promise<{ user: User; message: string }> {
+    async updateUserCredentials(userId: string, data: { email?: string; password?: string; currentEmail?: string }): Promise<{ user: User; message: string }> {
       return request(`/api/admin/users/${userId}/credentials`, {
         method: 'PUT',
         body: JSON.stringify(data),

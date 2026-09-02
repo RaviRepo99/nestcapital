@@ -228,6 +228,7 @@ export const AdminPage: React.FC = () => {
       await api.admin.updateUserCredentials(registeredUser.id, {
         email: nextEmail.trim() || undefined,
         password: nextPassword || undefined,
+        currentEmail: registeredUser.email,
       });
       showToast('User login credentials updated successfully.', 'success');
       await loadAllAdminData();
@@ -242,7 +243,7 @@ export const AdminPage: React.FC = () => {
     const nextPassword = prompt('New admin password (leave blank to keep current):') || '';
     if (!nextEmail && !nextPassword) return;
     try {
-      await api.admin.updateUserCredentials(user.id, { email: nextEmail.trim() || undefined, password: nextPassword || undefined });
+      await api.admin.updateUserCredentials(user.id, { email: nextEmail.trim() || undefined, password: nextPassword || undefined, currentEmail: user.email });
       showToast('Admin login credentials updated.', 'success');
     } catch (err: any) {
       showToast(err.message || 'Admin credential update failed.', 'error');
