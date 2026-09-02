@@ -1071,10 +1071,15 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
     updatedAt: new Date().toISOString(),
   };
   if (supabase) {
-    const { data: profile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
+    const { data: profile } = await supabase.from('profiles').select('*').eq('email', user.email).maybeSingle();
     if (profile) {
       const { data: liveWallet } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
       wallet = mapSupabaseWallet(liveWallet, profile.id);
+      user.kycStatus = profile.kyc_status || user.kycStatus;
+      user.kycDocumentType = profile.kyc_document_type || user.kycDocumentType;
+      user.kycDocumentNumber = profile.kyc_document_number || user.kycDocumentNumber;
+      user.kycDocumentImageFront = profile.kyc_document_image_front || user.kycDocumentImageFront;
+      user.kycDocumentImageBack = profile.kyc_document_image_back || user.kycDocumentImageBack;
     }
   }
 
@@ -2328,9 +2333,30 @@ app.put('/api/admin/users/:id/balance', adminMiddleware, async (req, res) => {
 });
 
 // Admin Approve/Reject KYC
-app.put('/api/admin/users/:id/kyc', adminMiddleware, (req, res) => {
+app.put('/api/admin/users/:id/kyc', adminMiddleware, async (req, res) => {
   const { id } = req.params;
   const { status, note } = req.body; // 'verified' | 'rejected'
+
+  if (!['verified', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'KYC status must be verified or rejected.' });
+  }
+
+  if (supabase) {
+    const { data: profile, error: profileLookupError } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+    if (profileLookupError) return res.status(500).json({ error: profileLookupError.message });
+    if (!profile) return res.status(404).json({ error: 'User not found.' });
+    const { error: updateError } = await supabase.from('profiles').update({ kyc_status: status }).eq('id', id);
+    if (updateError) return res.status(500).json({ error: updateError.message });
+    await supabase.from('notifications').insert({
+      id: `notif_${crypto.randomBytes(6).toString('hex')}`,
+      user_id: id,
+      title: status === 'verified' ? 'KYC Verified Successfully!' : 'KYC Verification Rejected',
+      message: status === 'verified' ? 'Your identity documents have been approved. Full platform features and limits are unlocked.' : `Your identity verification was rejected. Reason: ${note || 'Document unreadable or invalid'}. Please resubmit.`,
+      type: 'security',
+      read: false,
+    });
+    return res.json({ message: `User KYC ${status}`, user: { ...profile, kyc_status: status } });
+  }
 
   const db = readDb();
   const user = db.users.find((u: any) => u.id === id);

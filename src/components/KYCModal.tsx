@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import {
@@ -22,6 +22,12 @@ export const KYCModal: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    if (activeModal === 'kyc' && user?.kycStatus !== 'pending') {
+      setSubmitted(false);
+    }
+  }, [activeModal, user?.kycStatus]);
 
   if (activeModal !== 'kyc') return null;
 
