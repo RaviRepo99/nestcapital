@@ -1570,6 +1570,9 @@ app.post('/api/withdrawals', authMiddleware, (req, res) => {
   if (!wthAmount || wthAmount < 1000) {
     return res.status(400).json({ error: 'Minimum withdrawal amount is NPR 1,000.' });
   }
+  if (wthAmount > 50000) {
+    return res.status(400).json({ error: 'Maximum withdrawal amount is NPR 50,000.' });
+  }
 
   if (!method || !accountDetails) {
     return res.status(400).json({ error: 'Withdrawal method and payout account details are required.' });

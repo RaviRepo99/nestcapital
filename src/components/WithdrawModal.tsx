@@ -33,6 +33,9 @@ export const WithdrawModal: React.FC = () => {
 
   const availableBal = wallet?.availableBalance || 0;
   const minWithdrawal = 1000;
+  const maxWithdrawal = 50000;
+  const processFeeRate = 0.07;
+  const processFee = amount > 0 ? amount * processFeeRate : 0;
   const isInsufficient = availableBal < amount;
   const isKycVerified = user?.kycStatus === 'verified';
 
@@ -65,6 +68,11 @@ export const WithdrawModal: React.FC = () => {
 
     if (!amount || amount < minWithdrawal) {
       setError(`Minimum withdrawal amount is ${formatNPR(minWithdrawal)}.`);
+      return;
+    }
+
+    if (amount > maxWithdrawal) {
+      setError(`Maximum withdrawal amount is ${formatNPR(maxWithdrawal)}.`);
       return;
     }
 
@@ -156,7 +164,7 @@ export const WithdrawModal: React.FC = () => {
                 </div>
               </div>
               <p className="max-w-sm mx-auto text-center text-sm font-bold text-slate-900">
-                Withdrawal will arrive within 48 hours.
+                Withdrawal will be processed within 78 hours.
               </p>
               <p className="text-xs text-slate-500 max-w-sm mx-auto">
                 Payout requests are reviewed by our treasury desk and disbursed via ConnectIPS or direct merchant wallet transfer.
@@ -186,7 +194,7 @@ export const WithdrawModal: React.FC = () => {
                   </span>
                 </div>
                 <span className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
-                  Min: {formatNPR(minWithdrawal, false)}
+                  {formatNPR(minWithdrawal, false)} - {formatNPR(maxWithdrawal, false)}
                 </span>
               </div>
 
@@ -202,7 +210,7 @@ export const WithdrawModal: React.FC = () => {
                   <input
                     type="number"
                     min={minWithdrawal}
-                    max={availableBal || undefined}
+                    max={Math.min(availableBal || maxWithdrawal, maxWithdrawal)}
                     step={100}
                     value={amount || ''}
                     onChange={(e) => setAmount(Number(e.target.value))}
@@ -224,6 +232,15 @@ export const WithdrawModal: React.FC = () => {
                     <span className="text-rose-600 font-semibold text-[11px]">Amount exceeds balance</span>
                   )}
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3.5 text-[11px] text-slate-700 space-y-1.5">
+                <div className="flex justify-between"><span>Arrival Amount</span><strong>NPR 0</strong></div>
+                <div className="flex justify-between"><span>Withdraw Process Fee</span><strong>7% ({formatNPR(processFee, false)})</strong></div>
+                <div className="flex justify-between"><span>Free Withdrawal After</span><strong>21 days</strong></div>
+                <div className="flex justify-between"><span>Minimum Withdrawal</span><strong>{formatNPR(minWithdrawal, false)}</strong></div>
+                <div className="flex justify-between"><span>Maximum Withdrawal</span><strong>{formatNPR(maxWithdrawal, false)}</strong></div>
+                <div className="flex justify-between"><span>Processing Time</span><strong>Up to 78 hours</strong></div>
               </div>
 
               {/* Method Selection */}
