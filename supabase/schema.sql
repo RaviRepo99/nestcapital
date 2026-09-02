@@ -178,6 +178,66 @@ create index if not exists profiles_registration_device_idx on public.profiles(r
 drop index if exists profiles_registration_ip_unique;
 create unique index if not exists profiles_registration_device_unique on public.profiles(registration_device_id) where registration_device_id is not null;
 
+create or replace function public.apply_signup_referral()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  referrer profiles%rowtype;
+  inserted_referral_id text;
+begin
+  if new.referred_by is null or btrim(new.referred_by) = '' then
+    return new;
+  end if;
+
+  select * into referrer
+  from public.profiles
+  where upper(referral_code) = upper(btrim(new.referred_by))
+    and id <> new.id
+  limit 1;
+
+  if not found then
+    return new;
+  end if;
+
+  insert into public.referrals (id, referrer_id, referred_user_id, total_invested_by_referred, bonus_earned, status)
+  values ('ref_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, new.id, 0, 100, 'active')
+  on conflict (referrer_id, referred_user_id) do nothing
+  returning id into inserted_referral_id;
+
+  if inserted_referral_id is null then
+    return new;
+  end if;
+
+  insert into public.wallets (user_id, referral_earnings, available_balance)
+  values (referrer.id, 100, 0)
+  on conflict (user_id) do update set referral_earnings = public.wallets.referral_earnings + 100, updated_at = now();
+
+  insert into public.wallets (user_id, available_balance)
+  values (new.id, 50)
+  on conflict (user_id) do update set available_balance = public.wallets.available_balance + 50, updated_at = now();
+
+  insert into public.transactions (id, user_id, type, direction, amount, reference, description, status)
+  values
+    ('tx_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'referral_bonus', 'in', 100, 'REF-SIGNUP-' || upper(new.id::text), 'NPR 100 referral bonus for inviting ' || new.full_name, 'completed'),
+    ('tx_' || replace(gen_random_uuid()::text, '-', ''), new.id, 'referral_bonus', 'in', 50, 'WELCOME-REF-' || upper(new.id::text), 'NPR 50 referral signup welcome bonus', 'completed');
+
+  insert into public.notifications (id, user_id, title, message, type, read)
+  values
+    ('notif_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'New Referral Registered!', new.full_name || ' registered using your referral code. NPR 100 has been added to your referral earnings.', 'referral', false),
+    ('notif_' || replace(gen_random_uuid()::text, '-', ''), new.id, 'Referral Welcome Bonus Added!', 'NPR 50 has been added to your available balance for joining through a referral.', 'referral', false);
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_signup_referral_trigger on public.profiles;
+create trigger profiles_signup_referral_trigger
+after insert on public.profiles
+for each row execute function public.apply_signup_referral();
+
 alter table public.profiles enable row level security;
 alter table public.wallets enable row level security;
 alter table public.investment_plans enable row level security;
