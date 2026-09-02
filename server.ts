@@ -1177,24 +1177,22 @@ app.post('/api/auth/change-password', authMiddleware, (req, res) => {
   res.json({ message: 'Password changed successfully.' });
 });
 
-// Forgot Password (Simulated Secure Flow)
-app.post('/api/auth/forgot-password', (req, res) => {
+// Forgot Password
+app.post('/api/auth/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email is required.' });
 
-  const db = readDb();
-  const user = db.users.find((u: any) => u.email.toLowerCase() === email.toLowerCase().trim());
-
-  if (user) {
-    // In production, an email is dispatched. For simulation, provide instant instructions.
-    return res.json({
-      message: 'Password reset link has been dispatched to your email address.',
-      email: user.email,
-    });
+  const normalizedEmail = email.toLowerCase().trim();
+  if (supabaseAuth) {
+    const redirectTo = `${process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`}/reset-password`;
+    const { error } = await supabaseAuth.auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
+    if (error) return res.status(400).json({ error: error.message });
+    return res.json({ message: 'Password reset link has been sent to your email address.' });
   }
 
-  // Generic response to avoid email enumeration
-  res.json({ message: 'If an account exists with this email, reset instructions have been sent.' });
+  const db = readDb();
+  const user = db.users.find((candidate: any) => candidate.email.toLowerCase() === normalizedEmail);
+  res.json({ message: user ? 'Password reset instructions have been sent to your email address.' : 'If an account exists with this email, reset instructions have been sent.' });
 });
 
 // Submit KYC

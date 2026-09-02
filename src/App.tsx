@@ -17,6 +17,7 @@ import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { EmailVerificationPage } from './pages/EmailVerificationPage';
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { InvestmentsPage } from './pages/InvestmentsPage';
 import { PlansPage } from './pages/PlansPage';
@@ -74,7 +75,8 @@ const AppContent: React.FC = () => {
     currentRoute === 'login' ||
     currentRoute === 'register' ||
     currentRoute === 'email-verification' ||
-    currentRoute === 'forgot-password';
+    currentRoute === 'forgot-password' ||
+    currentRoute === 'reset-password';
 
   // Render current view
   const renderCurrentPage = () => {
@@ -89,6 +91,8 @@ const AppContent: React.FC = () => {
         return <EmailVerificationPage />;
       case 'forgot-password':
         return <ForgotPasswordPage />;
+      case 'reset-password':
+        return <ResetPasswordPage />;
       case 'dashboard':
         return isAuthenticated ? <DashboardPage /> : <LoginPage />;
       case 'investments':
