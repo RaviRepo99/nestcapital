@@ -56,6 +56,7 @@ export const AdminPage: React.FC = () => {
   const [referralSearch, setReferralSearch] = useState('');
   const [referralStatus, setReferralStatus] = useState<'all' | 'pending' | 'successful'>('all');
   const [loading, setLoading] = useState(true);
+  const [backgroundLoading, setBackgroundLoading] = useState(false);
 
   // Modal States
   const [selectedUserForBalance, setSelectedUserForBalance] = useState<User | null>(null);
@@ -76,41 +77,22 @@ export const AdminPage: React.FC = () => {
   const loadAllAdminData = async () => {
     try {
       setLoading(true);
-      const [
-        analyticsData,
-        depData,
-        withData,
-        userData,
-        invData,
-        plansData,
-        ticketData,
-        paymentSettingsData,
-        referralData,
-      ] = await Promise.all([
-        api.admin.getAnalytics(),
-        api.admin.getDeposits(),
-        api.admin.getWithdrawals(),
-        api.admin.getUsers(),
-        api.admin.getInvestments(),
-        api.admin.getPlans(),
-        api.admin.getTickets(),
-        api.getPaymentSettings(),
-        api.admin.getReferrals(),
-      ]);
-
+      const analyticsData = await api.admin.getAnalytics();
       setAnalytics(analyticsData);
-      setDeposits(depData);
-      setWithdrawals(withData);
-      setUsersList(userData);
-      setInvestments(invData);
-      setPlans(plansData);
-      setTickets(ticketData);
-      setPaymentSettings(paymentSettingsData);
-      setReferrals(referralData);
+      setLoading(false);
+      setBackgroundLoading(true);
+
+      const [depData, withData, userData, invData, plansData, ticketData, paymentSettingsData, referralData] = await Promise.all([
+        api.admin.getDeposits(), api.admin.getWithdrawals(), api.admin.getUsers(), api.admin.getInvestments(),
+        api.admin.getPlans(), api.admin.getTickets(), api.getPaymentSettings(), api.admin.getReferrals(),
+      ]);
+      setDeposits(depData); setWithdrawals(withData); setUsersList(userData); setInvestments(invData);
+      setPlans(plansData); setTickets(ticketData); setPaymentSettings(paymentSettingsData); setReferrals(referralData);
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
     } finally {
       setLoading(false);
+      setBackgroundLoading(false);
     }
   };
 
@@ -120,12 +102,17 @@ export const AdminPage: React.FC = () => {
 
   useEffect(() => {
     if (!isAdmin) return;
+    let refreshTimer: number | undefined;
+    const scheduleRefresh = () => {
+      if (refreshTimer) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void loadAllAdminData(), 600);
+    };
     const channel = supabase
       .channel('admin-referral-updates')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'referrals' }, () => void loadAllAdminData())
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets' }, () => void loadAllAdminData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'referrals' }, scheduleRefresh)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets' }, scheduleRefresh)
       .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+    return () => { if (refreshTimer) window.clearTimeout(refreshTimer); void supabase.removeChannel(channel); };
   }, [isAdmin]);
 
   if (!isAdmin) {
@@ -360,7 +347,7 @@ export const AdminPage: React.FC = () => {
             <span className="hidden sm:block"><span className="block text-[10px] font-bold uppercase text-amber-300">Admin profile</span><span className="block max-w-[150px] truncate text-xs text-slate-200">{user?.email}</span></span>
           </button>
           <button onClick={handleCreateAdmin} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-400" title="Create another administrator">New Admin</button>
-          <button onClick={loadAllAdminData} className="rounded-xl bg-slate-800 p-2 text-slate-200 transition hover:bg-slate-700" title="Refresh data"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+          <button onClick={loadAllAdminData} className="rounded-xl bg-slate-800 p-2 text-slate-200 transition hover:bg-slate-700" title={backgroundLoading ? 'Loading admin tables' : 'Refresh data'}><RefreshCw className={`h-4 w-4 ${loading || backgroundLoading ? 'animate-spin' : ''}`} /></button>
         </div>
       </div>
 
