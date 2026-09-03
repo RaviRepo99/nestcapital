@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { BrandLogo } from '../components/BrandLogo';
 import { api } from '../services/api';
@@ -10,6 +10,16 @@ export const ForgotPasswordPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cooldown, setCooldown] = useState(() => {
+    const sentAt = Number(sessionStorage.getItem('capitalnest_reset_sent_at') || 0);
+    return Math.max(0, 60 - Math.floor((Date.now() - sentAt) / 1000));
+  });
+
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(() => setCooldown((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,14 +29,23 @@ export const ForgotPasswordPage: React.FC = () => {
       setError('Please enter your registered email address.');
       return;
     }
+    if (cooldown > 0) {
+      setError(`Please wait ${cooldown} seconds before requesting another reset email.`);
+      return;
+    }
 
     try {
       setLoading(true);
       await api.forgotPassword(email.trim());
       setSubmitted(true);
+      sessionStorage.setItem('capitalnest_reset_sent_at', String(Date.now()));
+      setCooldown(60);
       showToast('Password reset link dispatched.', 'info');
     } catch (err: any) {
-      setError(err.message || 'Failed to request reset.');
+      const message = /rate|too many|limit/i.test(err.message || '')
+        ? 'Too many reset requests. Please wait a few minutes and try again.'
+        : err.message || 'Failed to request reset.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -90,10 +109,10 @@ export const ForgotPasswordPage: React.FC = () => {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || cooldown > 0}
                 className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition"
               >
-                {loading ? 'Sending Instructions...' : 'Send Reset Link'}
+                {loading ? 'Sending Instructions...' : cooldown > 0 ? `Try again in ${cooldown}s` : 'Send Reset Link'}
               </button>
 
               <button
