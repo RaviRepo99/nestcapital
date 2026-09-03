@@ -582,7 +582,10 @@ async function hydrateDbFromSupabase() {
 async function applySupabaseSignupReferral(referredUserId: string, referredUserName: string, referredUserEmail: string, referralCode?: string) {
   if (!supabase || !referralCode?.trim()) return null;
   const { data, error } = await supabase.rpc('process_referral_reward', { p_referred_user_id: referredUserId });
-  if (error) throw new Error(`Referral reward processing failed: ${error.message}`);
+  if (error) {
+    console.error(`Referral reward processing failed for ${referredUserEmail}: ${error.message}`);
+    return null;
+  }
   return data;
 }
 
