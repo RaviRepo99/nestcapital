@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { formatNPR, formatDate, getStatusBadgeClass } from '../lib/utils';
@@ -57,6 +57,7 @@ export const AdminPage: React.FC = () => {
   const [referralStatus, setReferralStatus] = useState<'all' | 'pending' | 'successful'>('all');
   const [loading, setLoading] = useState(true);
   const [backgroundLoading, setBackgroundLoading] = useState(false);
+  const refreshInFlight = useRef(false);
 
   // Modal States
   const [selectedUserForBalance, setSelectedUserForBalance] = useState<User | null>(null);
@@ -74,9 +75,11 @@ export const AdminPage: React.FC = () => {
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [ticketReplyText, setTicketReplyText] = useState('');
 
-  const loadAllAdminData = async () => {
+  const loadAllAdminData = async (initialLoad = false) => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     try {
-      setLoading(true);
+      if (initialLoad) setLoading(true);
       setBackgroundLoading(true);
 
       const [analyticsData, depData, withData, userData, invData, plansData, ticketData, paymentSettingsData, referralData] = await Promise.all([
@@ -86,17 +89,17 @@ export const AdminPage: React.FC = () => {
       setAnalytics(analyticsData);
       setDeposits(depData); setWithdrawals(withData); setUsersList(userData); setInvestments(invData);
       setPlans(plansData); setTickets(ticketData); setPaymentSettings(paymentSettingsData); setReferrals(referralData);
-      setLoading(false);
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
     } finally {
-      setLoading(false);
+      if (initialLoad) setLoading(false);
       setBackgroundLoading(false);
+      refreshInFlight.current = false;
     }
   };
 
   useEffect(() => {
-    loadAllAdminData();
+    void loadAllAdminData(true);
   }, []);
 
   useEffect(() => {
@@ -348,7 +351,7 @@ export const AdminPage: React.FC = () => {
             <span className="hidden sm:block"><span className="block text-[10px] font-bold uppercase text-amber-300">Admin profile</span><span className="block max-w-[150px] truncate text-xs text-slate-200">{user?.email}</span></span>
           </button>
           <button onClick={handleCreateAdmin} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-400" title="Create another administrator">New Admin</button>
-          <button onClick={loadAllAdminData} className="rounded-xl bg-slate-800 p-2 text-slate-200 transition hover:bg-slate-700" title={backgroundLoading ? 'Loading admin tables' : 'Refresh data'}><RefreshCw className={`h-4 w-4 ${loading || backgroundLoading ? 'animate-spin' : ''}`} /></button>
+          <button onClick={() => void loadAllAdminData()} disabled={backgroundLoading} className="rounded-xl bg-slate-800 p-2 text-slate-200 transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70" title={backgroundLoading ? 'Loading admin tables' : 'Refresh data'}><RefreshCw className={`h-4 w-4 ${backgroundLoading ? 'animate-spin' : ''}`} /></button>
         </div>
       </div>
 
