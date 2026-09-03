@@ -97,6 +97,13 @@ export const api = {
     return res;
   },
 
+  async cancelRegistration(email: string): Promise<void> {
+    await request('/api/auth/register/cancel', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
   async completeSupabaseSession(accessToken: string): Promise<AuthResponse> {
     const res = await request<AuthResponse>('/api/auth/session', {
       method: 'POST',

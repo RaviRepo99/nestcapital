@@ -911,6 +911,12 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
+app.post('/api/auth/register/cancel', (req, res) => {
+  const email = String(req.body?.email || '').toLowerCase().trim();
+  if (email) PENDING_REGISTRATIONS.delete(email);
+  res.json({ message: 'Pending registration cleared.' });
+});
+
 // Exchange the verified Supabase session for the app's existing session.
 app.post('/api/auth/session', async (req, res) => {
   const authorization = req.headers.authorization || '';

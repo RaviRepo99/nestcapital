@@ -186,7 +186,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         },
       });
-      if (error) throw new Error(`Could not send verification code: ${error.message}`);
+      if (error) {
+        await api.cancelRegistration(data.email);
+        throw new Error(`Could not send verification code: ${error.message}`);
+      }
       showToast('Registration successful. Check your email for the verification code.', 'info');
       navigate('email-verification');
       return;
