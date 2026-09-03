@@ -117,11 +117,7 @@ export const TransactionsPage: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((tx) => {
-                  const isCredit =
-                    tx.type === 'deposit' ||
-                    tx.type === 'profit_payout' ||
-                    tx.type === 'referral_bonus' ||
-                    tx.type === 'principal_return';
+                  const isCredit = tx.direction === 'in';
 
                   return (
                     <tr key={tx.id} className="hover:bg-slate-50/70 transition">
@@ -155,7 +151,7 @@ export const TransactionsPage: React.FC = () => {
                       <td className="p-3.5 text-slate-500">{formatDate(tx.createdAt)}</td>
 
                       <td className="p-3.5 font-mono text-[11px] text-slate-400">
-                        {tx.referenceId || tx.id.slice(0, 10)}
+                        {tx.reference || tx.id.slice(0, 10)}
                       </td>
 
                       <td className="p-3.5">

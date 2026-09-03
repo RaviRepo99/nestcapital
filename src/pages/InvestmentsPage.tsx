@@ -43,7 +43,7 @@ export const InvestmentsPage: React.FC = () => {
   });
 
   const totalInvested = investments.reduce((acc, i) => acc + (i.status === 'active' ? i.amount : 0), 0);
-  const totalEarned = investments.reduce((acc, i) => acc + i.totalEarned, 0);
+  const totalEarned = investments.reduce((acc, i) => acc + i.profitEarnedSoFar, 0);
 
   return (
     <div className="space-y-6 pb-12">
@@ -166,18 +166,18 @@ export const InvestmentsPage: React.FC = () => {
                     </div>
                     <div>
                       <span className="text-slate-400 text-[10px] block">Total Return</span>
-                      <strong className="text-slate-900">{formatNPR(inv.totalReturn)}</strong>
+                      <strong className="text-slate-900">{formatNPR(inv.expectedReturn)}</strong>
                     </div>
                   </div>
 
                   <div className="space-y-2 text-xs text-slate-600">
                     <div className="flex justify-between">
                       <span>Total Earned So Far:</span>
-                      <strong className="text-emerald-600 font-display">+{formatNPR(inv.totalEarned)}</strong>
+                      <strong className="text-emerald-600 font-display">+{formatNPR(inv.profitEarnedSoFar)}</strong>
                     </div>
                     <div className="flex justify-between">
                       <span>Daily Payout Rate:</span>
-                      <span className="font-semibold text-slate-900">+{formatNPR(inv.dailyYield)} / day</span>
+                      <span className="font-semibold text-slate-900">+{formatNPR(inv.dailyReturnAmount)} / day</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Start Date:</span>

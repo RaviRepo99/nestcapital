@@ -194,15 +194,15 @@ export const ReferralsPage: React.FC = () => {
                 <tbody className="divide-y divide-slate-100">
                   {stats.referees.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/70">
-                      <td className="p-3 font-bold text-slate-900">{r.fullName}</td>
-                      <td className="p-3 text-slate-400">{formatDate(r.joinedAt)}</td>
+                      <td className="p-3 font-bold text-slate-900">{r.referredUserName}</td>
+                      <td className="p-3 text-slate-400">{formatDate(r.createdAt)}</td>
                       <td className="p-3">
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 uppercase">
                           {r.status}
                         </span>
                       </td>
                       <td className="p-3 font-bold text-emerald-600 font-display">
-                        +{formatNPR(r.commissionEarned)}
+                        +{formatNPR(r.bonusEarned)}
                       </td>
                     </tr>
                   ))}

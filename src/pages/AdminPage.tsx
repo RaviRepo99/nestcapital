@@ -876,8 +876,8 @@ export const AdminPage: React.FC = () => {
                     <td className="p-3 font-bold text-slate-900">{inv.planName}</td>
                     <td className="p-3 font-bold text-slate-900 font-display">{formatNPR(inv.amount)}</td>
                     <td className="p-3 font-semibold text-amber-600">{inv.returnRate}%</td>
-                    <td className="p-3 font-bold text-emerald-600 font-display">+{formatNPR(inv.totalEarned)}</td>
-                    <td className="p-3 font-semibold text-slate-700">+{formatNPR(inv.dailyYield)}</td>
+                    <td className="p-3 font-bold text-emerald-600 font-display">+{formatNPR(inv.profitEarnedSoFar)}</td>
+                    <td className="p-3 font-semibold text-slate-700">+{formatNPR(inv.dailyReturnAmount)}</td>
                     <td className="p-3 text-slate-500">{inv.daysRemaining} days</td>
                     <td className="p-3">
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${getStatusBadgeClass(inv.status)}`}>

@@ -372,11 +372,11 @@ export const DashboardPage: React.FC = () => {
                       </div>
                       <div>
                         <span className="text-slate-400 text-[10px] block">Earned Profit</span>
-                        <strong className="text-emerald-600 font-display">+{formatNPR(inv.totalEarned)}</strong>
+                        <strong className="text-emerald-600 font-display">+{formatNPR(inv.profitEarnedSoFar)}</strong>
                       </div>
                       <div>
                         <span className="text-slate-400 text-[10px] block">Daily Yield</span>
-                        <span className="font-semibold text-slate-700">+{formatNPR(inv.dailyYield)}/day</span>
+                        <span className="font-semibold text-slate-700">+{formatNPR(inv.dailyReturnAmount)}/day</span>
                       </div>
                     </div>
 
@@ -417,7 +417,7 @@ export const DashboardPage: React.FC = () => {
               <div className="py-8 text-center text-xs text-slate-400">No transactions recorded yet</div>
             ) : (
               recentTransactions.map((tx) => {
-                const isCredit = tx.type === 'deposit' || tx.type === 'profit_payout' || tx.type === 'referral_bonus' || tx.type === 'principal_return';
+                const isCredit = tx.direction === 'in';
                 return (
                   <div key={tx.id} className="py-3 first:pt-1 last:pb-1 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-3">
