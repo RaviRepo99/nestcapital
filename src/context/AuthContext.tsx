@@ -40,7 +40,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function routeFromPath(pathname: string): string {
   const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-  if (hashParams.get('type') === 'recovery' || hashParams.has('error') || hashParams.has('access_token')) {
+  const queryParams = new URLSearchParams(window.location.search);
+  if (hashParams.get('type') === 'recovery' || hashParams.has('error') || hashParams.has('access_token') || queryParams.get('type') === 'recovery' || queryParams.has('code')) {
     return 'reset-password';
   }
   const route = pathname.replace(/^\/+|\/+$/g, '');
@@ -155,6 +156,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  useEffect(() => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') navigate('reset-password');
+    });
+    return () => subscription.subscription.unsubscribe();
+  }, []);
 
   const login = async (email: string, password: string) => {
     const res = await api.login({ email, password });

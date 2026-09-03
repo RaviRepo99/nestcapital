@@ -35,7 +35,7 @@ export const ResetPasswordPage: React.FC = () => {
       }
     });
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') confirmSession(session);
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') confirmSession(session);
     });
 
     return () => {
