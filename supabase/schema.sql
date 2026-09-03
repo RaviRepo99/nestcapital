@@ -338,24 +338,26 @@ alter table public.app_state enable row level security;
 
 do $$
 begin
-  if not exists (
-    select 1 from pg_publication_rel pr
-    join pg_publication p on p.oid = pr.prpubid
-    join pg_class c on c.oid = pr.prrelid
-    where p.pubname = 'supabase_realtime' and c.relname = 'wallets'
-  ) then alter publication supabase_realtime add table public.wallets; end if;
-  if not exists (
-    select 1 from pg_publication_rel pr
-    join pg_publication p on p.oid = pr.prpubid
-    join pg_class c on c.oid = pr.prrelid
-    where p.pubname = 'supabase_realtime' and c.relname = 'referrals'
-  ) then alter publication supabase_realtime add table public.referrals; end if;
-  if not exists (
-    select 1 from pg_publication_rel pr
-    join pg_publication p on p.oid = pr.prpubid
-    join pg_class c on c.oid = pr.prrelid
-    where p.pubname = 'supabase_realtime' and c.relname = 'support_tickets'
-  ) then alter publication supabase_realtime add table public.support_tickets; end if;
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    if not exists (
+      select 1 from pg_publication_rel pr
+      join pg_publication p on p.oid = pr.prpubid
+      join pg_class c on c.oid = pr.prrelid
+      where p.pubname = 'supabase_realtime' and c.relname = 'wallets'
+    ) then alter publication supabase_realtime add table public.wallets; end if;
+    if not exists (
+      select 1 from pg_publication_rel pr
+      join pg_publication p on p.oid = pr.prpubid
+      join pg_class c on c.oid = pr.prrelid
+      where p.pubname = 'supabase_realtime' and c.relname = 'referrals'
+    ) then alter publication supabase_realtime add table public.referrals; end if;
+    if not exists (
+      select 1 from pg_publication_rel pr
+      join pg_publication p on p.oid = pr.prpubid
+      join pg_class c on c.oid = pr.prrelid
+      where p.pubname = 'supabase_realtime' and c.relname = 'support_tickets'
+    ) then alter publication supabase_realtime add table public.support_tickets; end if;
+  end if;
 end $$;
 
 create or replace function public.is_admin()
