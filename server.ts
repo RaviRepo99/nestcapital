@@ -1275,7 +1275,7 @@ app.put('/api/auth/profile', authMiddleware, (req, res) => {
 });
 
 // Change Password
-app.post('/api/auth/change-password', authMiddleware, (req, res) => {
+app.post('/api/auth/change-password', authMiddleware, async (req, res) => {
   const user = (req as any).user;
   const { currentPassword, newPassword } = req.body;
 
@@ -1285,6 +1285,24 @@ app.post('/api/auth/change-password', authMiddleware, (req, res) => {
 
   if (newPassword.length < 6) {
     return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+  }
+
+  if (supabase && supabaseAuth) {
+    const { error: currentPasswordError } = await supabaseAuth.auth.signInWithPassword({
+      email: user.email,
+      password: currentPassword,
+    });
+    if (currentPasswordError) {
+      return res.status(400).json({ error: 'Current password does not match.' });
+    }
+
+    const { error: updatePasswordError } = await supabase.auth.admin.updateUserById(user.id, {
+      password: newPassword,
+    });
+    if (updatePasswordError) {
+      return res.status(500).json({ error: `Could not update password: ${updatePasswordError.message}` });
+    }
+    return res.json({ message: 'Password changed successfully.' });
   }
 
   const db = readDb();
