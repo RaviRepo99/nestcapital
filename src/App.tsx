@@ -1,4 +1,5 @@
 import React, { lazy, Suspense } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/Header';
 import { DesktopSidebar } from './components/DesktopSidebar';
@@ -171,6 +172,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppContent />
+      <Analytics />
     </AuthProvider>
   );
 }
