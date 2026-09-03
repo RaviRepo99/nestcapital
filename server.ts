@@ -19,11 +19,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 let dbReady: Promise<void> = Promise.resolve();
 app.use(async (_req, _res, next) => {
   try {
-    if (supabase) {
-      await hydrateDbFromSupabase();
-    } else {
-      await dbReady;
-    }
+    await dbReady;
     next();
   } catch (error) {
     next(error);
@@ -3571,8 +3567,8 @@ async function startServer() {
 
 export default app;
 
+dbReady = hydrateDbFromSupabase();
+
 if (!process.env.VERCEL) {
   startServer();
-} else {
-  dbReady = hydrateDbFromSupabase();
 }
