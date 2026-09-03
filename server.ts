@@ -739,25 +739,23 @@ app.post('/api/auth/register', async (req, res) => {
     return res.status(400).json({ error: 'An account with this phone number already exists.' });
   }
 
-  if (registrationDeviceId) {
-    const pendingDuplicate = [...PENDING_REGISTRATIONS.values()].some((pending) => pending.registrationDeviceId === registrationDeviceId);
-    if (pendingDuplicate) return res.status(400).json({ error: 'This device already has a pending registration.' });
-  }
-
   if (supabase) {
-    const [{ data: emailMatch }, { data: phoneMatch }, { data: ipMatch }, { data: deviceMatch }] = await Promise.all([
+    const [{ data: emailMatch }, { data: phoneMatch }, { data: deviceMatch }] = await Promise.all([
       supabase.from('profiles').select('id').eq('email', normalizedEmail).limit(1).maybeSingle(),
       supabase.from('profiles').select('id').eq('phone', normalizedPhone).limit(1).maybeSingle(),
-      registrationIp ? supabase.from('profiles').select('id').eq('registration_ip', registrationIp).limit(1).maybeSingle() : Promise.resolve({ data: null }),
       registrationDeviceId ? supabase.from('profiles').select('id').eq('registration_device_id', registrationDeviceId).limit(1).maybeSingle() : Promise.resolve({ data: null }),
     ]);
     if (emailMatch) return res.status(400).json({ error: 'An account with this email already exists.' });
     if (phoneMatch) return res.status(400).json({ error: 'An account with this phone number already exists.' });
-    if (ipMatch) return res.status(400).json({ error: 'Only one account can be registered from this IP address.' });
     if (deviceMatch) return res.status(400).json({ error: 'Only one account can be registered from this device.' });
   }
 
   if (supabaseAuth) {
+    if (registrationDeviceId) {
+      for (const [pendingEmail, pending] of PENDING_REGISTRATIONS.entries()) {
+        if (pending.registrationDeviceId === registrationDeviceId) PENDING_REGISTRATIONS.delete(pendingEmail);
+      }
+    }
     PENDING_REGISTRATIONS.set(normalizedEmail, {
       fullName: fullName.trim(),
       phone: normalizedPhone,
@@ -929,6 +927,17 @@ app.post('/api/auth/session', async (req, res) => {
   const user = db.users.find((candidate: any) => candidate.email.toLowerCase() === email);
   const pending = PENDING_REGISTRATIONS.get(email);
   if (!user && !pending) return res.status(404).json({ error: 'CapitalNest account was not found.' });
+  const pendingDeviceId = pending?.registrationDeviceId;
+  if (!user && pendingDeviceId) {
+    const existingDeviceUser = db.users.find((candidate: any) => candidate.registrationDeviceId === pendingDeviceId);
+    const { data: existingDeviceProfile } = supabase
+      ? await supabase.from('profiles').select('id').eq('registration_device_id', pendingDeviceId).limit(1).maybeSingle()
+      : { data: null };
+    if (existingDeviceUser || existingDeviceProfile) {
+      PENDING_REGISTRATIONS.delete(email);
+      return res.status(409).json({ error: 'Only one account can be registered from this device.' });
+    }
+  }
   let referralRewardResult: any = null;
 
   if (supabase && data.user) {
@@ -947,7 +956,13 @@ app.post('/api/auth/session', async (req, res) => {
       email_verified: true,
     };
     const { error: profileError } = await supabase.from('profiles').upsert(profilePayload, { onConflict: 'id' });
-    if (profileError) console.error(`Supabase profile save failed: ${profileError.message}`);
+    if (profileError) {
+      console.error(`Supabase profile save failed: ${profileError.message}`);
+      if (profileError.code === '23505' && pendingDeviceId) {
+        PENDING_REGISTRATIONS.delete(email);
+        return res.status(409).json({ error: 'Only one account can be registered from this device.' });
+      }
+    }
     const { error: walletError } = await supabase.from('wallets').upsert({ user_id: data.user.id }, { onConflict: 'user_id' });
     if (walletError) console.error(`Supabase wallet save failed: ${walletError.message}`);
     referralRewardResult = await applySupabaseSignupReferral(
