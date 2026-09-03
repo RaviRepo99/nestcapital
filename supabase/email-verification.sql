@@ -1,5 +1,7 @@
--- Run these queries in Supabase SQL Editor.
+-- IMPORTANT: Supabase SQL Editor uses PostgreSQL, not ClickHouse.
+-- Run the statements below one at a time.
 -- Replace the email before running the diagnostic query.
+-- If public.profiles does not exist, run supabase/schema.sql first.
 
 -- 1) Check whether the Auth user exists and whether the address is confirmed.
 select
