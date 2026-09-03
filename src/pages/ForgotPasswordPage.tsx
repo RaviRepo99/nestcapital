@@ -54,7 +54,7 @@ export const ForgotPasswordPage: React.FC = () => {
                 <CheckCircle2 className="w-6 h-6" />
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
-                If an account exists for <strong className="text-slate-900">{email}</strong>, a password reset link and temporary security code has been sent.
+                If an account exists for <strong className="text-slate-900">{email}</strong>, a password reset link has been sent. Open it, enter a new password, and your old password will be replaced.
               </p>
               <button
                 onClick={() => navigate('login')}

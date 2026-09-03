@@ -14,10 +14,23 @@ export const ResetPasswordPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setReady(!!data.session);
-      if (!data.session) setError('This password reset link is invalid or expired. Please request a new link.');
+    let mounted = true;
+    const confirmSession = (session: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']) => {
+      if (!mounted) return;
+      setReady(!!session);
+      if (!session) setError('This password reset link is invalid or expired. Please request a new link.');
+      else setError(null);
+    };
+
+    void supabase.auth.getSession().then(({ data }) => confirmSession(data.session));
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') confirmSession(session);
     });
+
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
   }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -30,6 +43,7 @@ export const ResetPasswordPage: React.FC = () => {
       const { error: updateError } = await supabase.auth.updateUser({ password });
       if (updateError) throw new Error(updateError.message);
       await supabase.auth.signOut();
+      setReady(false);
       setCompleted(true);
       showToast('Password updated successfully. You can now sign in.', 'success');
     } catch (err: any) {
