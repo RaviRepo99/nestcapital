@@ -17,20 +17,6 @@ import {
 
 const TOKEN_KEY = 'capitalnest_auth_token';
 const API_BASE_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
-const DEVICE_ID_KEY = 'capitalnest_registration_device_id';
-
-function getRegistrationDeviceId(): string {
-  try {
-    const existing = localStorage.getItem(DEVICE_ID_KEY);
-    if (existing) return existing;
-    const deviceId = crypto.randomUUID();
-    localStorage.setItem(DEVICE_ID_KEY, deviceId);
-    return deviceId;
-  } catch {
-    return 'device-' + Math.random().toString(36).slice(2);
-  }
-}
-
 export function getStoredToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY);
@@ -91,7 +77,7 @@ export const api = {
   async register(data: { fullName: string; email: string; phone: string; password: string; referralCode?: string }): Promise<AuthResponse> {
     const res = await request<AuthResponse>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ ...data, registrationDeviceId: getRegistrationDeviceId() }),
+      body: JSON.stringify(data),
     });
     if (!res.emailVerificationRequired) setStoredToken(res.token);
     return res;

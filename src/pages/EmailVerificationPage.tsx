@@ -31,8 +31,8 @@ export const EmailVerificationPage: React.FC = () => {
     submittingRef.current = true;
     const normalizedEmail = email.trim().toLowerCase();
     const otp = code.replace(/\D/g, '');
-    if (!normalizedEmail || otp.length !== 8) {
-      setError('Enter the 8-digit code from the verification email.');
+    if (!normalizedEmail || (otp.length !== 6 && otp.length !== 8)) {
+      setError('Enter the 6-digit code from the verification email.');
       return;
     }
 
@@ -121,7 +121,7 @@ export const EmailVerificationPage: React.FC = () => {
               <Mail className="h-6 w-6" />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold font-display text-slate-900">Verify your email</h2>
-            <p className="text-xs text-slate-500 mt-1">Enter the 8-digit code sent to {maskedEmail || 'your email address'}.</p>
+            <p className="text-xs text-slate-500 mt-1">Enter the code sent to {maskedEmail || 'your email address'}.</p>
           </div>
 
           {error && <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">{error}</div>}

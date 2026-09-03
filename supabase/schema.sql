@@ -212,7 +212,7 @@ create index if not exists referrals_referrer_id_idx on public.referrals(referre
 create index if not exists profiles_registration_ip_idx on public.profiles(registration_ip);
 create index if not exists profiles_registration_device_idx on public.profiles(registration_device_id);
 drop index if exists profiles_registration_ip_unique;
-create unique index if not exists profiles_registration_device_unique on public.profiles(registration_device_id) where registration_device_id is not null;
+drop index if exists profiles_registration_device_unique;
 
 drop trigger if exists profiles_signup_referral_trigger on public.profiles;
 drop function if exists public.apply_signup_referral();
