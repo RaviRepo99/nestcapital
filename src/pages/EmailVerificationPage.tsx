@@ -31,8 +31,8 @@ export const EmailVerificationPage: React.FC = () => {
     submittingRef.current = true;
     const normalizedEmail = email.trim().toLowerCase();
     const otp = code.replace(/\D/g, '');
-    if (!normalizedEmail || otp.length !== 8) {
-      setError('Enter the 8-digit code from the verification email.');
+    if (!normalizedEmail || ![6, 8].includes(otp.length)) {
+      setError('Enter the 6- or 8-digit code from the verification email.');
       submittingRef.current = false;
       return;
     }
@@ -122,7 +122,7 @@ export const EmailVerificationPage: React.FC = () => {
               <Mail className="h-6 w-6" />
             </div>
             <h2 className="text-xl sm:text-2xl font-bold font-display text-slate-900">Verify your email</h2>
-            <p className="text-xs text-slate-500 mt-1">Enter the 8-digit code sent to {maskedEmail || 'your email address'}.</p>
+            <p className="text-xs text-slate-500 mt-1">Enter the code sent to {maskedEmail || 'your email address'}.</p>
           </div>
 
           {error && <div className="mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium">{error}</div>}
@@ -130,7 +130,7 @@ export const EmailVerificationPage: React.FC = () => {
           <form onSubmit={handleVerify} className="space-y-4">
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Verification Code</label>
-              <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="00000000" className="w-full rounded-xl border border-slate-300 pl-3.5 pr-3.5 py-3 text-center text-lg tracking-[0.25em] font-bold text-slate-900 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none" required />
+              <input type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="000000 or 00000000" className="w-full rounded-xl border border-slate-300 pl-3.5 pr-3.5 py-3 text-center text-lg tracking-[0.25em] font-bold text-slate-900 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none" required />
             </div>
             <button type="submit" disabled={loading} className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 disabled:opacity-60">
               {loading ? 'Verifying...' : 'Verify Email'} <ArrowRight className="w-4 h-4" />

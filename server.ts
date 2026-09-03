@@ -31,11 +31,13 @@ app.use(async (_req, _res, next) => {
 });
 
 // Database directory & path
-const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
   : null;
-const supabaseAuth = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+const supabaseAuth = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const MAIL_FROM = process.env.MAIL_FROM || 'CapitalNest Nepal <notifications@capitalnest.np>';
@@ -612,7 +614,7 @@ function generateToken(user: any): string {
 }
 
 // Auth Middleware
-function authMiddleware(req: Request, res: Response, next: Function) {
+async function authMiddleware(req: Request, res: Response, next: Function) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized. Please login.' });
@@ -640,6 +642,28 @@ function authMiddleware(req: Request, res: Response, next: Function) {
               (req as any).user = user;
               return next();
             }
+            if (supabase) {
+              const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', signedSession.userId).maybeSingle();
+              if (!error && profile && !profile.is_blocked) {
+                (req as any).user = {
+                  id: profile.id,
+                  email: profile.email,
+                  fullName: profile.full_name,
+                  phone: profile.phone || '',
+                  avatar: profile.avatar,
+                  role: profile.role,
+                  referralCode: profile.referral_code,
+                  referredBy: profile.referred_by || undefined,
+                  kycStatus: profile.kyc_status,
+                  kycDocumentType: profile.kyc_document_type,
+                  kycDocumentNumber: profile.kyc_document_number,
+                  twoFactorEnabled: profile.two_factor_enabled,
+                  isBlocked: profile.is_blocked,
+                  createdAt: profile.created_at,
+                };
+                return next();
+              }
+            }
           }
         } catch {
           // Continue with the legacy token checks below.
@@ -660,7 +684,28 @@ function authMiddleware(req: Request, res: Response, next: Function) {
   }
 
   const db = readDb();
-  const user = db.users.find((u: any) => u.id === session.userId);
+  let user = db.users.find((u: any) => u.id === session.userId);
+  if (!user && supabase) {
+    const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', session.userId).maybeSingle();
+    if (!error && profile) {
+      user = {
+        id: profile.id,
+        email: profile.email,
+        fullName: profile.full_name,
+        phone: profile.phone || '',
+        avatar: profile.avatar,
+        role: profile.role,
+        referralCode: profile.referral_code,
+        referredBy: profile.referred_by || undefined,
+        kycStatus: profile.kyc_status,
+        kycDocumentType: profile.kyc_document_type,
+        kycDocumentNumber: profile.kyc_document_number,
+        twoFactorEnabled: profile.two_factor_enabled,
+        isBlocked: profile.is_blocked,
+        createdAt: profile.created_at,
+      };
+    }
+  }
   if (!user || user.isBlocked) {
     return res.status(401).json({ error: 'User account disabled or not found.' });
   }
@@ -925,20 +970,27 @@ app.post('/api/auth/session', async (req, res) => {
   const db = readDb();
   const user = db.users.find((candidate: any) => candidate.email.toLowerCase() === email);
   const pending = PENDING_REGISTRATIONS.get(email);
-  if (!user && !pending) return res.status(404).json({ error: 'CapitalNest account was not found.' });
+  const metadata = data.user.user_metadata || {};
+  if (!user && !pending && !metadata.full_name) return res.status(404).json({ error: 'CapitalNest account was not found.' });
+  const registration = pending || (metadata.full_name ? {
+    fullName: String(metadata.full_name),
+    phone: String(metadata.phone || ''),
+    passwordHash: '',
+    referralCode: typeof metadata.referral_code === 'string' ? metadata.referral_code : undefined,
+    registrationIp: '',
+  } : undefined);
   let referralRewardResult: any = null;
 
   if (supabase && data.user) {
-    const metadata = data.user.user_metadata || {};
     const profilePayload = {
       id: data.user.id,
       email,
-      full_name: user?.fullName || pending?.fullName || metadata.full_name || '',
-      phone: user?.phone || pending?.phone || metadata.phone || '',
+      full_name: user?.fullName || registration?.fullName || metadata.full_name || '',
+      phone: user?.phone || registration?.phone || metadata.phone || '',
       role: user?.role || 'user',
       referral_code: user?.referralCode || makeUniqueReferralCode(metadata.full_name || 'USER', db.users),
-      referred_by: user?.referredBy || pending?.referralCode || metadata.referral_code || null,
-      registration_ip: user?.registrationIp || pending?.registrationIp || null,
+      referred_by: user?.referredBy || registration?.referralCode || metadata.referral_code || null,
+      registration_ip: user?.registrationIp || registration?.registrationIp || null,
       kyc_status: user?.kycStatus || 'unverified',
       email_verified: true,
     };
@@ -956,22 +1008,22 @@ app.post('/api/auth/session', async (req, res) => {
     );
   }
 
-  if (!user && pending) {
-    const cleanNameCode = makeUniqueReferralCode(pending.fullName, db.users);
+  if (!user && registration) {
+    const cleanNameCode = makeUniqueReferralCode(registration.fullName, db.users);
     const newUser = {
       id: data.user.id,
       email,
-      passwordHash: pending.passwordHash,
+      passwordHash: registration.passwordHash,
       role: 'user',
-      fullName: pending.fullName,
-      phone: pending.phone,
+      fullName: registration.fullName,
+      phone: registration.phone,
       referralCode: cleanNameCode,
-      referredBy: pending.referralCode,
+      referredBy: registration.referralCode,
       kycStatus: 'unverified',
       twoFactorEnabled: false,
       isBlocked: false,
       emailVerified: true,
-      registrationIp: pending.registrationIp,
+      registrationIp: registration.registrationIp,
       createdAt: new Date().toISOString(),
     };
     const newWallet = {
