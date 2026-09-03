@@ -39,6 +39,10 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function routeFromPath(pathname: string): string {
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  if (hashParams.get('type') === 'recovery' || hashParams.has('error') || hashParams.has('access_token')) {
+    return 'reset-password';
+  }
   const route = pathname.replace(/^\/+|\/+$/g, '');
   if (!route && new URLSearchParams(window.location.search).has('ref')) return 'register';
   return route || 'login';

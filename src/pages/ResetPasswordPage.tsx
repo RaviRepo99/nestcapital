@@ -22,7 +22,18 @@ export const ResetPasswordPage: React.FC = () => {
       else setError(null);
     };
 
-    void supabase.auth.getSession().then(({ data }) => confirmSession(data.session));
+    void supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        confirmSession(data.session);
+        return;
+      }
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      if (hashParams.get('error_code') === 'otp_expired') {
+        setError('This reset link has expired. Request a new reset link and open it promptly.');
+      } else {
+        confirmSession(null);
+      }
+    });
     const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') confirmSession(session);
     });

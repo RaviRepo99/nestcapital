@@ -1307,7 +1307,8 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
   const normalizedEmail = email.toLowerCase().trim();
   if (supabaseAuth) {
-    const redirectTo = `${process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`}/reset-password`;
+    const appUrl = (process.env.PUBLIC_APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+    const redirectTo = `${appUrl}/reset-password`;
     const { error } = await supabaseAuth.auth.resetPasswordForEmail(normalizedEmail, { redirectTo });
     if (error) return res.status(400).json({ error: error.message });
     return res.json({ message: 'Password reset link has been sent to your email address.' });
