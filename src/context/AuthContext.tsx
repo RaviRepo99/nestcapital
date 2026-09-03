@@ -20,7 +20,7 @@ interface AuthContextType {
   navigate: (route: string, state?: any) => void;
   login: (email: string, password: string) => Promise<void>;
   loginAsAdmin: (email: string, password: string) => Promise<void>;
-  register: (data: { fullName: string; email: string; phone: string; password: string; referralCode?: string }) => Promise<void>;
+  register: (data: { fullName: string; email: string; phone: string; password: string; referralCode?: string; deviceId?: string }) => Promise<void>;
   completeEmailVerification: (accessToken: string) => Promise<void>;
   logout: () => void;
   refreshUserData: () => Promise<void>;
@@ -184,7 +184,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     navigate('admin');
   };
 
-  const register = async (data: { fullName: string; email: string; phone: string; password: string; referralCode?: string }) => {
+  const register = async (data: { fullName: string; email: string; phone: string; password: string; referralCode?: string; deviceId?: string }) => {
     const res = await api.register(data);
     if (res.emailVerificationRequired) {
       const { error } = await supabase.auth.signUp({
@@ -195,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             full_name: data.fullName,
             phone: data.phone,
             referral_code: data.referralCode?.trim().toUpperCase() || null,
+                      device_id: data.deviceId || null,
           },
         },
       });

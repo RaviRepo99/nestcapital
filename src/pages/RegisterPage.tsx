@@ -17,6 +17,15 @@ export const RegisterPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const getDeviceId = () => {
+    const key = 'capitalnest_device_id';
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const deviceId = crypto.randomUUID();
+    localStorage.setItem(key, deviceId);
+    return deviceId;
+  };
+
   useEffect(() => {
     const referralFromUrl = new URLSearchParams(window.location.search).get('ref');
     if (referralFromUrl) {
@@ -66,6 +75,7 @@ export const RegisterPage: React.FC = () => {
         phone: phone.trim(),
         password,
         referralCode: referralCode.trim() || undefined,
+        deviceId: getDeviceId(),
       });
     } catch (err: any) {
       setError(err.message || 'Registration failed.');

@@ -42,6 +42,7 @@ const PENDING_REGISTRATIONS = new Map<string, {
   phone: string;
   passwordHash: string;
   referralCode?: string;
+  deviceId?: string;
   registrationIp: string;
 }>();
 let liveDb: any | null = null;
@@ -759,7 +760,7 @@ app.get('/api/payment-settings', (req, res) => {
 
 // Register
 app.post('/api/auth/register', async (req, res) => {
-  const { fullName, email, phone, password, referralCode } = req.body;
+  const { fullName, email, phone, password, referralCode, deviceId } = req.body;
 
   if (!fullName || !email || !phone || !password) {
     return res.status(400).json({ error: 'All fields are required.' });
@@ -778,6 +779,18 @@ app.post('/api/auth/register', async (req, res) => {
   }
 
   const normalizedPhone = normalizePhone(phone);
+
+    const normalizedDeviceId = typeof deviceId === 'string' ? deviceId.trim() : '';
+    if (normalizedDeviceId) {
+      if (db.users.some((u: any) => u.registrationDeviceId === normalizedDeviceId)) {
+        return res.status(400).json({ error: 'This device already has a registered account.' });
+      }
+      if (supabase) {
+        const { data: deviceMatch, error: deviceError } = await supabase.from('profiles').select('id').eq('registration_device_id', normalizedDeviceId).limit(1).maybeSingle();
+        if (deviceError) return res.status(500).json({ error: deviceError.message });
+        if (deviceMatch) return res.status(400).json({ error: 'This device already has a registered account.' });
+      }
+    }
   if (db.users.some((u: any) => normalizePhone(String(u.phone || '')) === normalizedPhone)) {
     return res.status(400).json({ error: 'An account with this phone number already exists.' });
   }
@@ -797,6 +810,7 @@ app.post('/api/auth/register', async (req, res) => {
       phone: normalizedPhone,
       passwordHash: hashPassword(password),
       referralCode: referralCode?.trim() || undefined,
+      deviceId: normalizedDeviceId || undefined,
       registrationIp,
     });
     return res.status(201).json({
@@ -834,6 +848,7 @@ app.post('/api/auth/register', async (req, res) => {
     emailVerified: !supabaseAuth,
     emailVerificationSentAt: supabaseAuth ? new Date().toISOString() : undefined,
     registrationIp,
+    registrationDeviceId: normalizedDeviceId || undefined,
     createdAt: new Date().toISOString(),
   };
 
@@ -974,6 +989,7 @@ app.post('/api/auth/session', async (req, res) => {
     passwordHash: '',
     referralCode: typeof metadata.referral_code === 'string' ? metadata.referral_code : undefined,
     registrationIp: '',
+    deviceId: typeof metadata.device_id === 'string' ? metadata.device_id : undefined,
   } : undefined);
   let referralRewardResult: any = null;
 
@@ -987,6 +1003,7 @@ app.post('/api/auth/session', async (req, res) => {
       referral_code: user?.referralCode || makeUniqueReferralCode(metadata.full_name || 'USER', db.users),
       referred_by: user?.referredBy || registration?.referralCode || metadata.referral_code || null,
       registration_ip: user?.registrationIp || registration?.registrationIp || null,
+      registration_device_id: user?.registrationDeviceId || registration?.deviceId || metadata.device_id || null,
       kyc_status: user?.kycStatus || 'unverified',
       email_verified: true,
     };

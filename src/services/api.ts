@@ -87,7 +87,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   // Auth
-  async register(data: { fullName: string; email: string; phone: string; password: string; referralCode?: string }): Promise<AuthResponse> {
+  async register(data: { fullName: string; email: string; phone: string; password: string; referralCode?: string; deviceId?: string }): Promise<AuthResponse> {
     const res = await request<AuthResponse>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(data),
