@@ -1942,22 +1942,24 @@ app.post('/api/withdrawals', authMiddleware, async (req, res) => {
   }
 
   const db = readDb();
-  const walletIndex = db.wallets.findIndex((w: any) => w.userId === user.id);
-  if (walletIndex === -1) {
-    return res.status(400).json({ error: 'Wallet not found.' });
-  }
+  let wallet: any = null;
+  if (!supabase) {
+    const walletIndex = db.wallets.findIndex((w: any) => w.userId === user.id);
+    if (walletIndex === -1) {
+      return res.status(400).json({ error: 'Wallet not found.' });
+    }
 
-  const wallet = db.wallets[walletIndex];
-  if (wallet.availableBalance < wthAmount) {
-    return res.status(400).json({
-      error: `Insufficient available balance (NPR ${wallet.availableBalance.toLocaleString('en-IN')}).`,
-    });
-  }
+    wallet = db.wallets[walletIndex];
+    if (wallet.availableBalance < wthAmount) {
+      return res.status(400).json({
+        error: `Insufficient available balance (NPR ${wallet.availableBalance.toLocaleString('en-IN')}).`,
+      });
+    }
 
-  // Deduct from available balance and move to pending withdrawals
-  wallet.availableBalance -= wthAmount;
-  wallet.pendingWithdrawals = (wallet.pendingWithdrawals || 0) + wthAmount;
-  wallet.updatedAt = new Date().toISOString();
+    wallet.availableBalance -= wthAmount;
+    wallet.pendingWithdrawals = (wallet.pendingWithdrawals || 0) + wthAmount;
+    wallet.updatedAt = new Date().toISOString();
+  }
 
   const withdrawalId = 'wth_' + crypto.randomBytes(6).toString('hex');
   const newWithdrawal = {
