@@ -363,6 +363,24 @@ begin
       join pg_class c on c.oid = pr.prrelid
       where p.pubname = 'supabase_realtime' and c.relname = 'support_tickets'
     ) then alter publication supabase_realtime add table public.support_tickets; end if;
+    if not exists (
+      select 1 from pg_publication_rel pr
+      join pg_publication p on p.oid = pr.prpubid
+      join pg_class c on c.oid = pr.prrelid
+      where p.pubname = 'supabase_realtime' and c.relname = 'deposits'
+    ) then alter publication supabase_realtime add table public.deposits; end if;
+    if not exists (
+      select 1 from pg_publication_rel pr
+      join pg_publication p on p.oid = pr.prpubid
+      join pg_class c on c.oid = pr.prrelid
+      where p.pubname = 'supabase_realtime' and c.relname = 'withdrawals'
+    ) then alter publication supabase_realtime add table public.withdrawals; end if;
+    if not exists (
+      select 1 from pg_publication_rel pr
+      join pg_publication p on p.oid = pr.prpubid
+      join pg_class c on c.oid = pr.prrelid
+      where p.pubname = 'supabase_realtime' and c.relname = 'profiles'
+    ) then alter publication supabase_realtime add table public.profiles; end if;
   end if;
 end $$;
 

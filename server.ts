@@ -465,6 +465,17 @@ function mapSupabaseWallet(wallet: any, userId: string) {
   };
 }
 
+async function ensureSupabaseWallet(userId: string) {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from('wallets')
+    .upsert({ user_id: userId }, { onConflict: 'user_id' })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 async function notifyUser(userId: string, title: string, message: string, type: string, email?: string, subject = title) {
   if (supabase) {
     await supabase.from('notifications').insert({
@@ -1175,8 +1186,12 @@ app.post('/api/auth/login', async (req, res) => {
       : await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
     if (profileError) return res.status(500).json({ error: profileError.message });
     if (profile) {
-      const { data: liveWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
-      if (walletError) return res.status(500).json({ error: walletError.message });
+      let liveWallet: any;
+      try {
+        liveWallet = await ensureSupabaseWallet(profile.id);
+      } catch (walletError: any) {
+        return res.status(500).json({ error: walletError.message });
+      }
       wallet = mapSupabaseWallet(liveWallet, profile.id);
     }
   }
@@ -1249,7 +1264,12 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   if (supabase) {
     const profile = supabaseProfile;
     if (profile) {
-      const { data: liveWallet } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
+      let liveWallet: any;
+      try {
+        liveWallet = await ensureSupabaseWallet(profile.id);
+      } catch (walletError: any) {
+        return res.status(500).json({ error: walletError.message });
+      }
       wallet = mapSupabaseWallet(liveWallet, profile.id);
       user.kycStatus = profile.kyc_status || user.kycStatus;
       user.kycDocumentType = profile.kyc_document_type || user.kycDocumentType;
@@ -1527,8 +1547,12 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
     const { data: liveProfile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
     if (!liveProfile) return res.status(404).json({ error: 'User profile not found.' });
     persistenceUserId = liveProfile.id;
-    const { data: liveWallet, error: liveWalletError } = await supabase.from('wallets').select('*').eq('user_id', liveProfile.id).maybeSingle();
-    if (liveWalletError) return res.status(500).json({ error: liveWalletError.message });
+    let liveWallet: any;
+    try {
+      liveWallet = await ensureSupabaseWallet(liveProfile.id);
+    } catch (liveWalletError: any) {
+      return res.status(500).json({ error: liveWalletError.message });
+    }
     wallet = mapSupabaseWallet(liveWallet, liveProfile.id);
   }
   if (!wallet) return res.status(400).json({ error: 'Wallet not found.' });
@@ -1974,8 +1998,12 @@ app.post('/api/withdrawals', authMiddleware, async (req, res) => {
     const { data: profile, error: profileError } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
     if (profileError) return res.status(500).json({ error: profileError.message });
     if (!profile) return res.status(404).json({ error: 'User profile not found.' });
-    const { data: liveWallet, error: walletError } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
-    if (walletError) return res.status(500).json({ error: walletError.message });
+    let liveWallet: any;
+    try {
+      liveWallet = await ensureSupabaseWallet(profile.id);
+    } catch (walletError: any) {
+      return res.status(500).json({ error: walletError.message });
+    }
     const availableBalance = Number(liveWallet?.available_balance || 0);
     if (availableBalance < wthAmount) {
       return res.status(400).json({ error: `Insufficient available balance (NPR ${availableBalance.toLocaleString('en-IN')}).` });
@@ -2069,7 +2097,12 @@ app.get('/api/wallet', authMiddleware, async (req, res) => {
     if (supabase) {
       const { data: profile } = await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
       if (profile) {
-        const { data: liveWallet } = await supabase.from('wallets').select('*').eq('user_id', profile.id).maybeSingle();
+        let liveWallet: any;
+        try {
+          liveWallet = await ensureSupabaseWallet(profile.id);
+        } catch (walletError: any) {
+          return res.status(500).json({ error: walletError.message });
+        }
         wallet = mapSupabaseWallet(liveWallet, profile.id);
       }
     }
