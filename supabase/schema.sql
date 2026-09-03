@@ -218,7 +218,16 @@ create index if not exists referrals_referrer_id_idx on public.referrals(referre
 create index if not exists profiles_registration_ip_idx on public.profiles(registration_ip);
 create index if not exists profiles_registration_device_idx on public.profiles(registration_device_id);
 create unique index if not exists profiles_registration_device_unique on public.profiles(registration_device_id) where registration_device_id is not null;
-drop index if exists profiles_registration_ip_unique;
+with duplicate_ips as (
+  select id, row_number() over (partition by registration_ip order by created_at asc, id asc) as duplicate_rank
+  from public.profiles
+  where registration_ip is not null and registration_ip <> ''
+)
+update public.profiles as profile
+set registration_ip = null
+from duplicate_ips
+where profile.id = duplicate_ips.id and duplicate_ips.duplicate_rank > 1;
+create unique index if not exists profiles_registration_ip_unique on public.profiles(registration_ip) where registration_ip is not null and registration_ip <> '';
 
 drop trigger if exists profiles_signup_referral_trigger on public.profiles;
 drop function if exists public.apply_signup_referral();

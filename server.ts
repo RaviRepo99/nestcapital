@@ -802,17 +802,28 @@ app.post('/api/auth/register', async (req, res) => {
         if (deviceMatch) return res.status(400).json({ error: 'This device already has a registered account.' });
       }
     }
+  if (registrationIp) {
+    if (db.users.some((u: any) => u.registrationIp === registrationIp)) {
+      return res.status(400).json({ error: 'Only one account can be registered from this IP address.' });
+    }
+    const pendingIpMatch = Array.from(PENDING_REGISTRATIONS.values()).some((registration) => registration.registrationIp === registrationIp);
+    if (pendingIpMatch) {
+      return res.status(400).json({ error: 'A registration from this IP address is already awaiting email verification.' });
+    }
+  }
   if (db.users.some((u: any) => normalizePhone(String(u.phone || '')) === normalizedPhone)) {
     return res.status(400).json({ error: 'An account with this phone number already exists.' });
   }
 
   if (supabase) {
-    const [{ data: emailMatch }, { data: phoneMatch }] = await Promise.all([
+    const [{ data: emailMatch }, { data: phoneMatch }, { data: ipMatch }] = await Promise.all([
       supabase.from('profiles').select('id').eq('email', normalizedEmail).limit(1).maybeSingle(),
       supabase.from('profiles').select('id').eq('phone', normalizedPhone).limit(1).maybeSingle(),
+      registrationIp ? supabase.from('profiles').select('id').eq('registration_ip', registrationIp).limit(1).maybeSingle() : Promise.resolve({ data: null }),
     ]);
     if (emailMatch) return res.status(400).json({ error: 'An account with this email already exists.' });
     if (phoneMatch) return res.status(400).json({ error: 'An account with this phone number already exists.' });
+    if (ipMatch) return res.status(400).json({ error: 'Only one account can be registered from this IP address.' });
   }
 
   if (supabaseAuth) {
@@ -1005,6 +1016,17 @@ app.post('/api/auth/session', async (req, res) => {
   let referralRewardResult: any = null;
 
   if (supabase && data.user) {
+    if (registration?.registrationIp) {
+      const { data: ipMatch, error: ipError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('registration_ip', registration.registrationIp)
+        .neq('id', data.user.id)
+        .limit(1)
+        .maybeSingle();
+      if (ipError) return res.status(500).json({ error: ipError.message });
+      if (ipMatch) return res.status(400).json({ error: 'Only one account can be registered from this IP address.' });
+    }
     const profilePayload = {
       id: data.user.id,
       email,
