@@ -40,6 +40,12 @@ create table if not exists public.wallets (
   updated_at timestamptz not null default now()
 );
 
+update public.wallets
+set available_balance = available_balance + referral_earnings,
+    referral_earnings = 0,
+    updated_at = now()
+where referral_earnings > 0;
+
 create table if not exists public.investment_plans (
   id text primary key,
   name text not null,
@@ -262,7 +268,7 @@ begin
   end if;
 
   insert into public.wallets (user_id) values (referrer.id) on conflict (user_id) do nothing;
-  update public.wallets set referral_earnings = referral_earnings + 100, updated_at = now() where user_id = referrer.id;
+  update public.wallets set available_balance = available_balance + 100, updated_at = now() where user_id = referrer.id;
   insert into public.wallets (user_id) values (p_referred_user_id) on conflict (user_id) do nothing;
   update public.wallets set available_balance = available_balance + 50, updated_at = now() where user_id = p_referred_user_id;
 
@@ -311,7 +317,7 @@ begin
     return jsonb_build_object('commission_paid', false, 'reason', 'already_processed');
   end if;
   insert into public.wallets (user_id) values (referrer.id) on conflict (user_id) do nothing;
-  update public.wallets set referral_earnings = referral_earnings + commission, updated_at = now() where user_id = referrer.id;
+  update public.wallets set available_balance = available_balance + commission, total_earnings = total_earnings + commission, updated_at = now() where user_id = referrer.id;
   update public.referrals set total_invested_by_referred = total_invested_by_referred + p_investment_amount, bonus_earned = bonus_earned + commission, investment_commission_rewarded = true where id = referral_row.id;
   insert into public.transactions (id, user_id, type, direction, amount, reference, description, status)
   values ('tx_' || replace(gen_random_uuid()::text, '-', ''), referrer.id, 'referral_bonus', 'in', commission, 'REF-INVEST-' || upper(p_investment_id), '5% referral commission from ' || referred_user.full_name || '''s investment', 'completed');

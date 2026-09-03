@@ -869,7 +869,7 @@ app.post('/api/auth/register', async (req, res) => {
   if (referrerId) {
     const referrerWallet = db.wallets.find((wallet: any) => wallet.userId === referrerId);
     if (referrerWallet) {
-      referrerWallet.referralEarnings = (referrerWallet.referralEarnings || 0) + 100;
+      referrerWallet.availableBalance = (referrerWallet.availableBalance || 0) + 100;
       referrerWallet.updatedAt = new Date().toISOString();
     }
     newWallet.availableBalance = 50;
@@ -1658,21 +1658,16 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
       const refWalletIndex = db.wallets.findIndex((w: any) => w.userId === referrer.id);
       if (refWalletIndex !== -1) {
         const refWallet = db.wallets[refWalletIndex];
-        refWallet.referralEarnings = (refWallet.referralEarnings || 0) + commissionAmount;
-        const referralBalance = refWallet.referralEarnings;
-        if (referralBalance >= 1000) {
-          refWallet.availableBalance += referralBalance;
-          refWallet.totalEarnings = (refWallet.totalEarnings || 0) + referralBalance;
-          refWallet.referralEarnings = 0;
-        }
+        refWallet.availableBalance = (refWallet.availableBalance || 0) + commissionAmount;
+        refWallet.totalEarnings = (refWallet.totalEarnings || 0) + commissionAmount;
         refWallet.updatedAt = new Date().toISOString();
 
-        if (referralBalance >= 1000) db.transactions.unshift({
+        db.transactions.unshift({
           id: 'tx_' + crypto.randomBytes(6).toString('hex'),
           userId: referrer.id,
           type: 'referral_bonus',
           direction: 'in',
-          amount: referralBalance,
+          amount: commissionAmount,
           reference: 'REF-' + user.fullName.split(' ')[0].toUpperCase(),
           description: `5% Referral Commission from ${user.fullName} investment`,
           status: 'completed',
@@ -1683,9 +1678,7 @@ app.post('/api/investments', authMiddleware, async (req, res) => {
           id: 'notif_' + crypto.randomBytes(6).toString('hex'),
           userId: referrer.id,
           title: 'Referral Bonus Earned! 🎁',
-          message: referralBalance >= 1000
-            ? `Your referral earnings reached NPR ${referralBalance.toLocaleString('en-IN')} and were added to your available balance.`
-            : `NPR ${commissionAmount.toLocaleString('en-IN')} referral earning added. NPR ${(1000 - referralBalance).toLocaleString('en-IN')} more is needed to unlock it.`,
+          message: `NPR ${commissionAmount.toLocaleString('en-IN')} referral earning was added to your available balance.`,
           type: 'referral',
           read: false,
           createdAt: new Date().toISOString(),
