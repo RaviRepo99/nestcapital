@@ -39,7 +39,7 @@ const supabaseFetch: typeof fetch = async (input, init = {}) => {
     clearTimeout(timeoutId);
   }
 };
-const supabase = SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+let supabase = SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
   ? createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { global: { fetch: supabaseFetch } })
   : null;
 const supabaseAuth = SUPABASE_URL && SUPABASE_ANON_KEY
@@ -583,6 +583,8 @@ async function hydrateDbFromSupabase() {
   const { data, error } = await supabase.from('app_state').select('data').eq('id', 'capitalnest').maybeSingle();
   if (error) {
     console.warn(`Supabase app state was not loaded: ${error.message}`);
+    supabase = null;
+    liveDb = getInitialDb();
     return;
   }
 
