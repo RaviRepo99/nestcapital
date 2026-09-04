@@ -2649,10 +2649,10 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
   const db = readDb();
   if (supabase) {
     const [{ data: profiles, error: profilesError }, { data: wallets, error: walletsError }, { data: investments, error: investmentsError }, { data: referrals, error: referralsError }] = await Promise.all([
-      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
-      supabase.from('wallets').select('*'),
-      supabase.from('investments').select('*'),
-      supabase.from('referrals').select('*'),
+      supabase.from('profiles').select('id, role, email, phone, avatar, full_name, referred_by, referral_code, kyc_status, kyc_document_type, kyc_document_number, kyc_document_image_front, kyc_document_image_back, two_factor_enabled, is_blocked, email_verified, created_at').order('created_at', { ascending: false }),
+      supabase.from('wallets').select('user_id, available_balance, invested_balance, total_earnings, referral_earnings, total_deposited, total_withdrawn, pending_withdrawals, pending_deposits, updated_at'),
+      supabase.from('investments').select('id, user_id, plan_name, amount, expected_return, profit_earned_so_far, status'),
+      supabase.from('referrals').select('id, referrer_id, referred_user_id, total_invested_by_referred, bonus_earned, status, created_at'),
     ]);
 
     if (profilesError) return res.status(500).json({ error: profilesError.message });
@@ -2664,13 +2664,18 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
     const walletRows = walletsError ? [] : (wallets || []);
     const investmentRows = investmentsError ? [] : (investments || []);
     const referralRows = referralsError ? [] : (referrals || []);
+    const walletsByUserId = new Map(walletRows.map((wallet: any) => [wallet.user_id, wallet]));
+    const investmentsByUserId = new Map<string, any[]>();
+    investmentRows.forEach((investment: any) => investmentsByUserId.set(investment.user_id, [...(investmentsByUserId.get(investment.user_id) || []), investment]));
+    const referralsByReferrerId = new Map<string, any[]>();
+    referralRows.forEach((referral: any) => referralsByReferrerId.set(referral.referrer_id, [...(referralsByReferrerId.get(referral.referrer_id) || []), referral]));
     const profilesById = new Map(profileRows.map((profile: any) => [profile.id, profile]));
     const profilesByReferralCode = new Map(profileRows.map((profile: any) => [String(profile.referral_code || '').toUpperCase(), profile]));
     return res.json(profileRows.map((profile: any) => {
         const kycImages = getKycImages(profile);
-        const userWallet = walletRows.find((wallet: any) => wallet.user_id === profile.id);
-        const userInvestments = investmentRows.filter((investment: any) => investment.user_id === profile.id);
-        const userReferrals = referralRows.filter((referral: any) => referral.referrer_id === profile.id);
+        const userWallet = walletsByUserId.get(profile.id);
+        const userInvestments = investmentsByUserId.get(profile.id) || [];
+        const userReferrals = referralsByReferrerId.get(profile.id) || [];
         const referrer = profile.referred_by && ((profilesById.get(profile.referred_by) as any) || profilesByReferralCode.get(String(profile.referred_by).toUpperCase()));
         return {
           id: profile.id,
@@ -2998,7 +3003,7 @@ app.put('/api/admin/users/:id/kyc', adminMiddleware, async (req, res) => {
 app.get('/api/admin/deposits', adminMiddleware, async (req, res) => {
   if (supabase) {
     const [{ data: deposits, error: depositsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from('deposits').select('*').order('created_at', { ascending: false }),
+      supabase.from('deposits').select('id, user_id, amount, payment_method, payment_reference, sender_name, sender_account, payment_proof, notes, status, admin_note, created_at, verified_at').order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, email'),
     ]);
     if (depositsError) return res.status(500).json({ error: depositsError.message });
