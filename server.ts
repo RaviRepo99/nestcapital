@@ -2684,8 +2684,8 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
           kycStatus: profile.kyc_status,
           kycDocumentType: profile.kyc_document_type,
           kycDocumentNumber: profile.kyc_document_number,
-          kycDocumentImageFront: kycImages.front,
-          kycDocumentImageBack: kycImages.back,
+          kycDocumentImageFront: profile.kyc_status === 'pending' ? kycImages.front : '',
+          kycDocumentImageBack: profile.kyc_status === 'pending' ? kycImages.back : '',
           twoFactorEnabled: profile.two_factor_enabled,
           isBlocked: profile.is_blocked,
           emailVerified: profile.email_verified,
@@ -3006,6 +3006,7 @@ app.get('/api/admin/deposits', adminMiddleware, async (req, res) => {
     const profileById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
     return res.json((deposits || []).map((deposit: any) => ({
       ...mapSupabaseDeposit(deposit),
+      paymentProof: deposit.status === 'pending' ? (deposit.payment_proof || undefined) : undefined,
       userFullName: profileById.get(deposit.user_id)?.full_name || '',
       userEmail: profileById.get(deposit.user_id)?.email || '',
     })));
