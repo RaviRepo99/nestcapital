@@ -2649,14 +2649,22 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
       supabase.from('referrals').select('*'),
     ]);
 
-    if (!profilesError && !walletsError && !investmentsError && !referralsError && profiles) {
-      const profilesById = new Map(profiles.map((profile: any) => [profile.id, profile]));
-      const profilesByReferralCode = new Map(profiles.map((profile: any) => [String(profile.referral_code || '').toUpperCase(), profile]));
-      return res.json(profiles.map((profile: any) => {
+    if (profilesError) return res.status(500).json({ error: profilesError.message });
+    if (walletsError) console.warn(`Admin users wallet data unavailable: ${walletsError.message}`);
+    if (investmentsError) console.warn(`Admin users investment data unavailable: ${investmentsError.message}`);
+    if (referralsError) console.warn(`Admin users referral data unavailable: ${referralsError.message}`);
+
+    const profileRows = profiles || [];
+    const walletRows = walletsError ? [] : (wallets || []);
+    const investmentRows = investmentsError ? [] : (investments || []);
+    const referralRows = referralsError ? [] : (referrals || []);
+    const profilesById = new Map(profileRows.map((profile: any) => [profile.id, profile]));
+    const profilesByReferralCode = new Map(profileRows.map((profile: any) => [String(profile.referral_code || '').toUpperCase(), profile]));
+    return res.json(profileRows.map((profile: any) => {
         const kycImages = getKycImages(profile);
-        const userWallet = wallets?.find((wallet: any) => wallet.user_id === profile.id);
-        const userInvestments = investments?.filter((investment: any) => investment.user_id === profile.id) || [];
-        const userReferrals = referrals?.filter((referral: any) => referral.referrer_id === profile.id) || [];
+        const userWallet = walletRows.find((wallet: any) => wallet.user_id === profile.id);
+        const userInvestments = investmentRows.filter((investment: any) => investment.user_id === profile.id);
+        const userReferrals = referralRows.filter((referral: any) => referral.referrer_id === profile.id);
         const referrer = profile.referred_by && ((profilesById.get(profile.referred_by) as any) || profilesByReferralCode.get(String(profile.referred_by).toUpperCase()));
         return {
           id: profile.id,
@@ -2701,7 +2709,6 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
           })),
         };
       }));
-    }
   }
 
   const safeUsers = db.users.map((u: any) => {
