@@ -121,7 +121,7 @@ export const AdminPage: React.FC = () => {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, scheduleRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, scheduleRefresh)
       .subscribe();
-    const intervalId = window.setInterval(() => void loadAllAdminData(), 1000);
+    const intervalId = window.setInterval(() => void loadAllAdminData(), 2000);
     return () => { if (refreshTimer) window.clearTimeout(refreshTimer); window.clearInterval(intervalId); void supabase.removeChannel(channel); };
   }, [isAdmin]);
 
