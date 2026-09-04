@@ -82,13 +82,22 @@ export const AdminPage: React.FC = () => {
       if (initialLoad) setLoading(true);
       setBackgroundLoading(true);
 
-      const [analyticsData, depData, withData, userData, invData, plansData, ticketData, paymentSettingsData, referralData] = await Promise.all([
+      const results = await Promise.allSettled([
         api.admin.getAnalytics(), api.admin.getDeposits(), api.admin.getWithdrawals(), api.admin.getUsers(),
         api.admin.getInvestments(), api.admin.getPlans(), api.admin.getTickets(), api.getPaymentSettings(), api.admin.getReferrals(),
       ]);
-      setAnalytics(analyticsData);
-      setDeposits(depData); setWithdrawals(withData); setUsersList(userData); setInvestments(invData);
-      setPlans(plansData); setTickets(ticketData); setPaymentSettings(paymentSettingsData); setReferrals(referralData);
+      const [analyticsResult, depositsResult, withdrawalsResult, usersResult, investmentsResult, plansResult, ticketsResult, paymentSettingsResult, referralsResult] = results;
+      if (analyticsResult.status === 'fulfilled') setAnalytics(analyticsResult.value);
+      if (depositsResult.status === 'fulfilled') setDeposits(depositsResult.value);
+      if (withdrawalsResult.status === 'fulfilled') setWithdrawals(withdrawalsResult.value);
+      if (usersResult.status === 'fulfilled') setUsersList(usersResult.value);
+      if (investmentsResult.status === 'fulfilled') setInvestments(investmentsResult.value);
+      if (plansResult.status === 'fulfilled') setPlans(plansResult.value);
+      if (ticketsResult.status === 'fulfilled') setTickets(ticketsResult.value);
+      if (paymentSettingsResult.status === 'fulfilled') setPaymentSettings(paymentSettingsResult.value);
+      if (referralsResult.status === 'fulfilled') setReferrals(referralsResult.value);
+      const failedRequests = results.filter((result) => result.status === 'rejected');
+      if (failedRequests.length) console.warn(`${failedRequests.length} admin data request(s) failed; retained the last successful data.`);
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
     } finally {

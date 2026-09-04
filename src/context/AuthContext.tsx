@@ -141,12 +141,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') void refreshUserData();
     };
-    const intervalId = window.setInterval(refreshWhenVisible, 1000);
+    const intervalId = user.role === 'admin' ? undefined : window.setInterval(refreshWhenVisible, 1000);
     document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
       void supabase.removeChannel(channel);
-      window.clearInterval(intervalId);
+      if (intervalId) window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
     };
   }, [user]);
