@@ -1200,7 +1200,6 @@ app.post('/api/auth/login', async (req, res) => {
   }
   if (!user) return res.status(404).json({ error: 'Account profile not found.' });
 
-  const token = generateToken(user);
   let wallet = db.wallets.find((w: any) => w.userId === user.id);
   if (supabase) {
     const { data: profile, error: profileError } = supabaseProfile
@@ -1208,6 +1207,7 @@ app.post('/api/auth/login', async (req, res) => {
       : await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
     if (profileError) return res.status(500).json({ error: profileError.message });
     if (profile) {
+      user.id = profile.id;
       let liveWallet: any;
       try {
         liveWallet = await ensureSupabaseWallet(profile.id);
@@ -1233,6 +1233,7 @@ app.post('/api/auth/login', async (req, res) => {
     writeDb(db);
   }
 
+  const token = generateToken(user);
   const { passwordHash, ...safeUser } = user;
 
   res.json({
