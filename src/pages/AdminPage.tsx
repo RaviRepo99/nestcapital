@@ -17,7 +17,6 @@ import {
   Edit2,
   Send,
   Bell,
-  RefreshCw,
   Search,
   MessageCircle,
   Sparkles,
@@ -56,7 +55,6 @@ export const AdminPage: React.FC = () => {
   const [referralSearch, setReferralSearch] = useState('');
   const [referralStatus, setReferralStatus] = useState<'all' | 'pending' | 'successful'>('all');
   const [loading, setLoading] = useState(true);
-  const [backgroundLoading, setBackgroundLoading] = useState(false);
   const refreshInFlight = useRef(false);
 
   // Modal States
@@ -80,29 +78,25 @@ export const AdminPage: React.FC = () => {
     refreshInFlight.current = true;
     try {
       if (initialLoad) setLoading(true);
-      setBackgroundLoading(true);
 
-      const results = await Promise.allSettled([
-        api.admin.getAnalytics(), api.admin.getDeposits(), api.admin.getWithdrawals(), api.admin.getUsers(),
-        api.admin.getInvestments(), api.admin.getPlans(), api.admin.getTickets(), api.getPaymentSettings(), api.admin.getReferrals(),
-      ]);
-      const [analyticsResult, depositsResult, withdrawalsResult, usersResult, investmentsResult, plansResult, ticketsResult, paymentSettingsResult, referralsResult] = results;
-      if (analyticsResult.status === 'fulfilled') setAnalytics(analyticsResult.value);
-      if (depositsResult.status === 'fulfilled') setDeposits(depositsResult.value);
-      if (withdrawalsResult.status === 'fulfilled') setWithdrawals(withdrawalsResult.value);
-      if (usersResult.status === 'fulfilled') setUsersList(usersResult.value);
-      if (investmentsResult.status === 'fulfilled') setInvestments(investmentsResult.value);
-      if (plansResult.status === 'fulfilled') setPlans(plansResult.value);
-      if (ticketsResult.status === 'fulfilled') setTickets(ticketsResult.value);
-      if (paymentSettingsResult.status === 'fulfilled') setPaymentSettings(paymentSettingsResult.value);
-      if (referralsResult.status === 'fulfilled') setReferrals(referralsResult.value);
+      const requests = [
+        api.admin.getAnalytics().then(setAnalytics),
+        api.admin.getDeposits().then(setDeposits),
+        api.admin.getWithdrawals().then(setWithdrawals),
+        api.admin.getUsers().then(setUsersList),
+        api.admin.getInvestments().then(setInvestments),
+        api.admin.getPlans().then(setPlans),
+        api.admin.getTickets().then(setTickets),
+        api.getPaymentSettings().then(setPaymentSettings),
+        api.admin.getReferrals().then(setReferrals),
+      ];
+      const results = await Promise.allSettled(requests);
       const failedRequests = results.filter((result) => result.status === 'rejected');
       if (failedRequests.length) console.warn(`${failedRequests.length} admin data request(s) failed; retained the last successful data.`);
     } catch (err) {
       console.error('Failed to load admin dashboard data:', err);
     } finally {
       if (initialLoad) setLoading(false);
-      setBackgroundLoading(false);
       refreshInFlight.current = false;
     }
   };
@@ -366,7 +360,6 @@ export const AdminPage: React.FC = () => {
             <span className="hidden sm:block"><span className="block text-[10px] font-bold uppercase text-amber-300">Admin profile</span><span className="block max-w-[150px] truncate text-xs text-slate-200">{user?.email}</span></span>
           </button>
           <button onClick={handleCreateAdmin} className="rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-amber-400" title="Create another administrator">New Admin</button>
-          <button onClick={() => void loadAllAdminData()} disabled={backgroundLoading} className="rounded-xl bg-slate-800 p-2 text-slate-200 transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-70" title={backgroundLoading ? 'Loading admin tables' : 'Refresh data'}><RefreshCw className={`h-4 w-4 ${backgroundLoading ? 'animate-spin' : ''}`} /></button>
         </div>
       </div>
 
