@@ -1155,11 +1155,12 @@ app.post('/api/auth/login', async (req, res) => {
 
   const seedEmail = process.env.ADMIN_SEED_EMAIL?.toLowerCase().trim();
   const seedPassword = process.env.ADMIN_SEED_PASSWORD;
-  if (seedEmail && seedPassword && normalizedEmail === seedEmail && password === seedPassword) {
+  const isSeedAdminLogin = Boolean(seedEmail && seedPassword && normalizedEmail === seedEmail && password === seedPassword);
+  if (isSeedAdminLogin) {
     const seededAdmin = db.users.find((candidate: any) => candidate.role === 'admin');
     if (seededAdmin) {
       seededAdmin.email = seedEmail;
-      seededAdmin.passwordHash = hashPassword(seedPassword);
+      seededAdmin.passwordHash = hashPassword(seedPassword!);
       seededAdmin.emailVerified = true;
       user = seededAdmin;
       writeDb(db);
@@ -1178,7 +1179,7 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(403).json({ error: 'Please verify your email before signing in.' });
   }
 
-  if (supabaseAuth) {
+  if (supabaseAuth && !isSeedAdminLogin) {
     const { error: authError } = await supabaseAuth.auth.signInWithPassword({
       email: normalizedEmail,
       password,
@@ -1216,7 +1217,7 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user) return res.status(404).json({ error: 'Account profile not found.' });
 
   let wallet = db.wallets.find((w: any) => w.userId === user.id);
-  if (supabase) {
+  if (supabase && !isSeedAdminLogin) {
     const { data: profile, error: profileError } = supabaseProfile
       ? { data: supabaseProfile, error: null }
       : await supabase.from('profiles').select('id').eq('email', user.email).maybeSingle();
