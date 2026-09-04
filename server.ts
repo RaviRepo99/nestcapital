@@ -2653,7 +2653,7 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
       supabase.from('wallets').select('user_id, available_balance, invested_balance, total_earnings, total_deposited, total_withdrawn, pending_withdrawals, pending_deposits, updated_at'),
       supabase.from('investments').select('id, user_id, plan_name, amount, expected_return, profit_earned_so_far, status'),
       supabase.from('referrals').select('id, referrer_id, referred_user_id, total_invested_by_referred, bonus_earned, status, created_at'),
-      supabase.from('profiles').select('id, kyc_document_image, kyc_document_image_front, kyc_document_image_back'),
+      supabase.from('profiles').select('id, kyc_document_image, kyc_document_image_front, kyc_document_image_back').eq('kyc_status', 'pending'),
     ]);
 
     if (profilesError) return res.status(500).json({ error: profilesError.message });
@@ -2692,8 +2692,8 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
           kycStatus: profile.kyc_status,
           kycDocumentType: profile.kyc_document_type,
           kycDocumentNumber: profile.kyc_document_number,
-          kycDocumentImageFront: kycImages.front,
-          kycDocumentImageBack: kycImages.back,
+          kycDocumentImageFront: profile.kyc_status === 'pending' ? kycImages.front : '',
+          kycDocumentImageBack: profile.kyc_status === 'pending' ? kycImages.back : '',
           twoFactorEnabled: profile.two_factor_enabled,
           isBlocked: profile.is_blocked,
           emailVerified: profile.email_verified,
