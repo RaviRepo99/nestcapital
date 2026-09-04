@@ -651,7 +651,12 @@ async function authMiddleware(req: Request, res: Response, next: Function) {
               return next();
             }
             if (supabase) {
-              const { data: profile, error } = await supabase.from('profiles').select('*').eq('id', signedSession.userId).maybeSingle();
+              let { data: profile, error } = await supabase.from('profiles').select('*').eq('id', signedSession.userId).maybeSingle();
+              if (!profile && !error && signedSession.email) {
+                const emailLookup = await supabase.from('profiles').select('*').eq('email', signedSession.email.toLowerCase().trim()).maybeSingle();
+                profile = emailLookup.data;
+                error = emailLookup.error;
+              }
               if (!error && profile && !profile.is_blocked) {
                 (req as any).user = {
                   id: profile.id,
