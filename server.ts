@@ -29,11 +29,21 @@ app.use(async (_req, _res, next) => {
 // Database directory & path
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_REQUEST_TIMEOUT_MS = 8000;
+const supabaseFetch: typeof fetch = async (input, init = {}) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), SUPABASE_REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
 const supabase = SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-  ? createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  ? createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { global: { fetch: supabaseFetch } })
   : null;
 const supabaseAuth = SUPABASE_URL && SUPABASE_ANON_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { fetch: supabaseFetch } })
   : null;
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const MAIL_FROM = process.env.MAIL_FROM || 'CapitalNest Nepal <notifications@capitalnest.np>';
@@ -3685,7 +3695,12 @@ async function startServer() {
 
 export default app;
 
-dbReady = hydrateDbFromSupabase();
+dbReady = Promise.race([
+  hydrateDbFromSupabase(),
+  new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+]).catch((error) => {
+  console.warn(`Supabase startup hydration failed: ${error instanceof Error ? error.message : String(error)}`);
+});
 
 if (!process.env.VERCEL) {
   startServer();
