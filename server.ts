@@ -2651,12 +2651,13 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
 
     if (!profilesError && !walletsError && !investmentsError && !referralsError && profiles) {
       const profilesById = new Map(profiles.map((profile: any) => [profile.id, profile]));
+      const profilesByReferralCode = new Map(profiles.map((profile: any) => [String(profile.referral_code || '').toUpperCase(), profile]));
       return res.json(profiles.map((profile: any) => {
         const kycImages = getKycImages(profile);
         const userWallet = wallets?.find((wallet: any) => wallet.user_id === profile.id);
         const userInvestments = investments?.filter((investment: any) => investment.user_id === profile.id) || [];
         const userReferrals = referrals?.filter((referral: any) => referral.referrer_id === profile.id) || [];
-        const referrer = profile.referred_by && (profilesById.get(profile.referred_by) as any);
+        const referrer = profile.referred_by && ((profilesById.get(profile.referred_by) as any) || profilesByReferralCode.get(String(profile.referred_by).toUpperCase()));
         return {
           id: profile.id,
           role: profile.role,
@@ -2675,18 +2676,7 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
           isBlocked: profile.is_blocked,
           emailVerified: profile.email_verified,
           createdAt: profile.created_at,
-          wallet: userWallet ? {
-            userId: userWallet.user_id,
-            availableBalance: Number(userWallet.available_balance),
-            investedBalance: Number(userWallet.invested_balance),
-            totalEarnings: Number(userWallet.total_earnings),
-            referralEarnings: Number(userWallet.referral_earnings),
-            totalDeposited: Number(userWallet.total_deposited),
-            totalWithdrawn: Number(userWallet.total_withdrawn),
-            pendingWithdrawals: Number(userWallet.pending_withdrawals),
-            pendingDeposits: Number(userWallet.pending_deposits),
-            updatedAt: userWallet.updated_at,
-          } : undefined,
+          wallet: mapSupabaseWallet(userWallet, profile.id),
           investmentsCount: userInvestments.length,
           investments: userInvestments.map((investment: any) => ({
             id: investment.id,
@@ -2935,7 +2925,7 @@ app.put('/api/admin/users/:id/kyc', adminMiddleware, async (req, res) => {
     const { data: profile, error: profileLookupError } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
     if (profileLookupError) return res.status(500).json({ error: profileLookupError.message });
     if (!profile) return res.status(404).json({ error: 'User not found.' });
-    const { error: updateError } = await supabase.from('profiles').update({ kyc_status: status }).eq('id', id);
+    const { data: updatedProfile, error: updateError } = await supabase.from('profiles').update({ kyc_status: status }).eq('id', id).select('*').single();
     if (updateError) return res.status(500).json({ error: updateError.message });
     await supabase.from('notifications').insert({
       id: `notif_${crypto.randomBytes(6).toString('hex')}`,
@@ -2945,7 +2935,27 @@ app.put('/api/admin/users/:id/kyc', adminMiddleware, async (req, res) => {
       type: 'security',
       read: false,
     });
-    return res.json({ message: `User KYC ${status}`, user: { ...profile, kyc_status: status } });
+    return res.json({
+      message: `User KYC ${status}`,
+      user: {
+        id: updatedProfile.id,
+        email: updatedProfile.email,
+        role: updatedProfile.role,
+        fullName: updatedProfile.full_name,
+        phone: updatedProfile.phone || '',
+        avatar: updatedProfile.avatar,
+        referralCode: updatedProfile.referral_code,
+        referredBy: updatedProfile.referred_by || undefined,
+        kycStatus: updatedProfile.kyc_status,
+        kycDocumentType: updatedProfile.kyc_document_type,
+        kycDocumentNumber: updatedProfile.kyc_document_number,
+        kycDocumentImageFront: getKycImages(updatedProfile).front,
+        kycDocumentImageBack: getKycImages(updatedProfile).back,
+        twoFactorEnabled: updatedProfile.two_factor_enabled,
+        isBlocked: updatedProfile.is_blocked,
+        createdAt: updatedProfile.created_at,
+      },
+    });
   }
 
   const db = readDb();

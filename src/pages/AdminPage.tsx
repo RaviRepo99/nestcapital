@@ -118,7 +118,8 @@ export const AdminPage: React.FC = () => {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, scheduleRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'support_tickets' }, scheduleRefresh)
       .subscribe();
-    return () => { if (refreshTimer) window.clearTimeout(refreshTimer); void supabase.removeChannel(channel); };
+    const intervalId = window.setInterval(() => void loadAllAdminData(), 1000);
+    return () => { if (refreshTimer) window.clearTimeout(refreshTimer); window.clearInterval(intervalId); void supabase.removeChannel(channel); };
   }, [isAdmin]);
 
   if (!isAdmin) {
@@ -217,9 +218,11 @@ export const AdminPage: React.FC = () => {
 
   const handleUpdateKYC = async (userId: string, status: 'verified' | 'rejected') => {
     try {
-      await api.admin.updateUserKYC(userId, status);
+      const response = await api.admin.updateUserKYC(userId, status);
+      setUsersList((current) => current.map((registeredUser) => registeredUser.id === userId ? { ...registeredUser, ...response.user, kycStatus: status } : registeredUser));
+      setSelectedKycUser((current) => current?.id === userId ? { ...current, ...response.user, kycStatus: status } : current);
       showToast(`KYC status updated to ${status}.`, 'success');
-      await loadAllAdminData();
+      void loadAllAdminData();
     } catch (err: any) {
       showToast(err.message || 'KYC update failed', 'error');
     }

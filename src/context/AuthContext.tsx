@@ -133,12 +133,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'wallets', filter: `user_id=eq.${user.id}` }, () => {
         void refreshUserData();
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, () => {
+        void refreshUserData();
+      })
       .subscribe();
 
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') void refreshUserData();
     };
-    const intervalId = window.setInterval(refreshWhenVisible, 10000);
+    const intervalId = window.setInterval(refreshWhenVisible, 1000);
     document.addEventListener('visibilitychange', refreshWhenVisible);
 
     return () => {
