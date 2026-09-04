@@ -3006,7 +3006,7 @@ app.put('/api/admin/users/:id/kyc', adminMiddleware, async (req, res) => {
 app.get('/api/admin/deposits', adminMiddleware, async (req, res) => {
   if (supabase) {
     const [{ data: deposits, error: depositsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from('deposits').select('id, user_id, amount, payment_method, payment_reference, status, created_at').order('created_at', { ascending: false }),
+      supabase.from('deposits').select('id, user_id, amount, payment_method, payment_reference, payment_proof, status, created_at').order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, email'),
     ]);
     if (depositsError) return res.status(500).json({ error: depositsError.message });
