@@ -2649,8 +2649,8 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
   const db = readDb();
   if (supabase) {
     const [{ data: profiles, error: profilesError }, { data: wallets, error: walletsError }, { data: investments, error: investmentsError }, { data: referrals, error: referralsError }] = await Promise.all([
-      supabase.from('profiles').select('id, role, email, phone, avatar, full_name, referred_by, referral_code, kyc_status, kyc_document_type, kyc_document_number, kyc_document_image_front, kyc_document_image_back, two_factor_enabled, is_blocked, email_verified, created_at').order('created_at', { ascending: false }),
-      supabase.from('wallets').select('user_id, available_balance, invested_balance, total_earnings, referral_earnings, total_deposited, total_withdrawn, pending_withdrawals, pending_deposits, updated_at'),
+      supabase.from('profiles').select('id, role, email, phone, full_name, referred_by, referral_code, registration_ip, kyc_status, kyc_document_type, kyc_document_number, created_at').order('created_at', { ascending: false }),
+      supabase.from('wallets').select('user_id, available_balance, invested_balance, total_earnings, total_deposited, total_withdrawn, pending_withdrawals, pending_deposits, updated_at'),
       supabase.from('investments').select('id, user_id, plan_name, amount, expected_return, profit_earned_so_far, status'),
       supabase.from('referrals').select('id, referrer_id, referred_user_id, total_invested_by_referred, bonus_earned, status, created_at'),
     ]);
@@ -3003,7 +3003,7 @@ app.put('/api/admin/users/:id/kyc', adminMiddleware, async (req, res) => {
 app.get('/api/admin/deposits', adminMiddleware, async (req, res) => {
   if (supabase) {
     const [{ data: deposits, error: depositsError }, { data: profiles, error: profilesError }] = await Promise.all([
-      supabase.from('deposits').select('id, user_id, amount, payment_method, payment_reference, sender_name, sender_account, payment_proof, notes, status, admin_note, created_at, verified_at').order('created_at', { ascending: false }),
+      supabase.from('deposits').select('id, user_id, amount, payment_method, payment_reference, status, created_at').order('created_at', { ascending: false }),
       supabase.from('profiles').select('id, full_name, email'),
     ]);
     if (depositsError) return res.status(500).json({ error: depositsError.message });
