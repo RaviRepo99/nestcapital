@@ -2648,17 +2648,19 @@ app.get('/api/admin/analytics', adminMiddleware, async (req, res) => {
 app.get('/api/admin/users', adminMiddleware, async (req, res) => {
   const db = readDb();
   if (supabase) {
-    const [{ data: profiles, error: profilesError }, { data: wallets, error: walletsError }, { data: investments, error: investmentsError }, { data: referrals, error: referralsError }] = await Promise.all([
+    const [{ data: profiles, error: profilesError }, { data: wallets, error: walletsError }, { data: investments, error: investmentsError }, { data: referrals, error: referralsError }, { data: kycDocuments, error: kycDocumentsError }] = await Promise.all([
       supabase.from('profiles').select('id, role, email, phone, full_name, referred_by, referral_code, registration_ip, kyc_status, kyc_document_type, kyc_document_number, created_at').order('created_at', { ascending: false }),
       supabase.from('wallets').select('user_id, available_balance, invested_balance, total_earnings, total_deposited, total_withdrawn, pending_withdrawals, pending_deposits, updated_at'),
       supabase.from('investments').select('id, user_id, plan_name, amount, expected_return, profit_earned_so_far, status'),
       supabase.from('referrals').select('id, referrer_id, referred_user_id, total_invested_by_referred, bonus_earned, status, created_at'),
+      supabase.from('profiles').select('id, kyc_document_image, kyc_document_image_front, kyc_document_image_back').eq('kyc_status', 'pending'),
     ]);
 
     if (profilesError) return res.status(500).json({ error: profilesError.message });
     if (walletsError) console.warn(`Admin users wallet data unavailable: ${walletsError.message}`);
     if (investmentsError) console.warn(`Admin users investment data unavailable: ${investmentsError.message}`);
     if (referralsError) console.warn(`Admin users referral data unavailable: ${referralsError.message}`);
+    if (kycDocumentsError) console.warn(`Admin KYC document data unavailable: ${kycDocumentsError.message}`);
 
     const profileRows = profiles || [];
     const walletRows = walletsError ? [] : (wallets || []);
@@ -2669,10 +2671,11 @@ app.get('/api/admin/users', adminMiddleware, async (req, res) => {
     investmentRows.forEach((investment: any) => investmentsByUserId.set(investment.user_id, [...(investmentsByUserId.get(investment.user_id) || []), investment]));
     const referralsByReferrerId = new Map<string, any[]>();
     referralRows.forEach((referral: any) => referralsByReferrerId.set(referral.referrer_id, [...(referralsByReferrerId.get(referral.referrer_id) || []), referral]));
+    const kycDocumentsByUserId = new Map((kycDocumentsError ? [] : (kycDocuments || [])).map((profile: any) => [profile.id, profile]));
     const profilesById = new Map(profileRows.map((profile: any) => [profile.id, profile]));
     const profilesByReferralCode = new Map(profileRows.map((profile: any) => [String(profile.referral_code || '').toUpperCase(), profile]));
     return res.json(profileRows.map((profile: any) => {
-        const kycImages = getKycImages(profile);
+        const kycImages = getKycImages(kycDocumentsByUserId.get(profile.id) || profile);
         const userWallet = walletsByUserId.get(profile.id);
         const userInvestments = investmentsByUserId.get(profile.id) || [];
         const userReferrals = referralsByReferrerId.get(profile.id) || [];
